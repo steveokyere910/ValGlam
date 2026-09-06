@@ -107,9 +107,11 @@ function App() {
       const isSetupOwner = setup?.exists && setup.data().createdBy === user.uid;
       setIsAdmin(token.claims.admin === true || isSetupOwner);
       const reference = new URLSearchParams(window.location.search).get("reference");
-      if (reference && window.valCareFunctions) {
+      if (reference && window.valCarePaymentApiUrl) {
         try {
-          await window.valCareFunctions.httpsCallable("verifyPaystackPayment")({ reference });
+          const response = await fetch(`${window.valCarePaymentApiUrl}/verify`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reference }) });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || "Payment could not be confirmed.");
           window.history.replaceState({}, document.title, window.location.pathname);
           setOrderPlaced(true);
           setActivePanel("cart");
@@ -182,21 +184,24 @@ function App() {
   const placeOrder = async () => {
     if (!cartItems.length || isCheckingOut) return;
     const user = window.valCareAuth?.currentUser;
-    if (!user || !window.valCareFunctions) {
+    if (!user || !window.valCarePaymentApiUrl) {
       setOrderMessage("Please sign in before placing an order.");
       return;
     }
     setIsCheckingOut(true);
     setOrderMessage("");
     try {
-      const initializePayment = window.valCareFunctions.httpsCallable("initializePaystackPayment");
-      const result = await initializePayment({
-        items: cartItems.map(({ id }) => ({ id })),
+      const response = await fetch(`${window.valCarePaymentApiUrl}/initialize`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+        email: user.email,
+        amount: Math.round(cartTotal * currencies[currency].rate * 100),
+        items: cartItems.map(({ id }) => id),
         currency,
         callbackUrl: `${window.location.origin}${window.location.pathname}`
-      });
+      }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Payment could not be initialized.");
       window.trackValCareEvent?.("begin_checkout", { value: cartTotal * currencies[currency].rate, currency });
-      window.location.assign(result.data.authorizationUrl);
+      window.location.assign(result.authorizationUrl);
     } catch (error) {
       console.error("Paystack checkout initialization failed", error);
       const code = String(error.code || "").replace("functions/", "");
