@@ -16,6 +16,18 @@
 }
 
 * { box-sizing: border-box; }
+.site-shell { background: var(--purple-wash); color: var(--ink); min-height: 100vh; transition: background .2s, color .2s; }
+.site-shell.theme-dark { --ink: #fffaff; --muted: #d8c9df; --cream: #33263b; --paper: #292033; --sage: #493854; --deep-sage: #d7a4ef; --coral: #f1a08d; --purple-soft: #41314b; --purple-wash: #211a26; --line: #594a63; --shadow: 0 22px 60px rgba(0,0,0,.28); }
+@media (prefers-color-scheme: dark) {
+  .site-shell.theme-system { --ink: #fffaff; --muted: #d8c9df; --cream: #33263b; --paper: #292033; --sage: #493854; --deep-sage: #d7a4ef; --coral: #f1a08d; --purple-soft: #41314b; --purple-wash: #211a26; --line: #594a63; --shadow: 0 22px 60px rgba(0,0,0,.28); }
+}
+.site-shell.theme-dark .hero-text, .site-shell.theme-system .hero-text { color: var(--muted); }
+.site-shell.theme-dark .location-card, .site-shell.theme-system .location-card { background: var(--purple-soft); border-color: var(--line); }
+.site-shell.theme-dark .product-search, .site-shell.theme-dark .category, .site-shell.theme-system .product-search, .site-shell.theme-system .category { background: var(--paper); border-color: var(--line); color: var(--ink); }
+.site-shell.theme-dark .value-strip, .site-shell.theme-system .value-strip { background: var(--cream); }
+.site-shell.theme-dark .value-item, .site-shell.theme-system .value-item { border-color: var(--line); }
+.site-shell.theme-dark footer, .site-shell.theme-system footer { background: #382b42; color: var(--muted); }
+.site-shell.theme-dark .footer-contact, .site-shell.theme-system .footer-contact, .site-shell.theme-dark .footer-contact strong, .site-shell.theme-system .footer-contact strong, .site-shell.theme-dark .footer-contact a, .site-shell.theme-system .footer-contact a { color: var(--muted); }
 html { overflow-x: hidden; scroll-behavior: smooth; }
 body { margin: 0; background: var(--purple-wash); color: var(--ink); font-family: "DM Sans", sans-serif; isolation: isolate; position: relative; }
 body::before { animation: background-drift calc(18s / max(var(--motion-scale), .15)) ease-in-out infinite alternate; background: radial-gradient(circle at 12% 18%, rgba(143,85,184,.12), transparent 22%), radial-gradient(circle at 88% 54%, rgba(220,128,106,.08), transparent 20%), radial-gradient(circle at 45% 92%, rgba(219,229,217,.2), transparent 24%); content: ""; inset: 0; pointer-events: none; position: fixed; z-index: -2; }
@@ -299,7 +311,7 @@ footer { background: #d8b34a; border-top: 0; color: #392719; font-size: 11px; pa
 }
 
 @media (max-width: 400px) {
-  .navbar { padding: 14px 12px; } .brand-logo { height: 48px; width: 48px; } .logo-name { font-size: 8px; } .icon-button { padding: 4px; } .icon-button svg { height: 18px; width: 18px; } .nav-actions { gap: 1px; } .user-name { gap: 5px; max-width: 82px; font-size: 12px; padding-right: 7px; } .user-avatar { flex-basis: 22px; height: 22px; width: 22px; } .user-identity { max-width: 50px; overflow: hidden; } .login-link { font-size: 10px; padding: 9px 8px; }
+  .navbar { padding: 14px 12px; } .brand-logo { height: 48px; width: 48px; } .logo-name { font-size: 8px; } .icon-button { padding: 4px; } .icon-button svg { height: 18px; width: 18px; } .nav-actions { gap: 1px; } .user-name { gap: 5px; max-width: 108px; font-size: 12px; padding-right: 7px; } .user-avatar { flex-basis: 22px; height: 22px; width: 22px; } .user-identity { max-width: 76px; overflow: visible; } .user-display-name { overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; } .login-link { font-size: 10px; padding: 9px 8px; }
   .hero-copy { padding: 52px 20px 45px; } .hero h1 { font-size: clamp(42px, 14vw, 56px); } .hero-text { font-size: 14px; }
   .section { padding: 52px 14px; } .section-heading { display: block; } .section h2 { margin-bottom: 12px; } .product-grid { gap: 20px 9px; } .product-image { height: 145px; } .product-image > span:not(.badge) { font-size: 44px; } .product-info { padding-top: 11px; } .product-info h3 { font-size: 15px; } .add-button { font-size: 10px; padding: 7px 6px; } .locations-section { padding-left: 14px; padding-right: 14px; } .location-card { padding: 18px; }
   .account-panel { padding-left: 16px; padding-right: 16px; }
@@ -309,7 +321,8 @@ footer { background: #d8b34a; border-top: 0; color: #392719; font-size: 11px; pa
   .navbar { align-items: center; gap: 6px; }
   .logo { min-width: 0; }
   .nav-actions { flex: 1 1 auto; justify-content: flex-end; min-width: 0; }
-  .user-name { max-width: 72px; }
+  .user-name { max-width: 96px; }
+  .user-identity { max-width: 64px; }
   .user-identity small { display: none; }
   .hero-copy { padding-left: 16px; padding-right: 16px; }
   .hero h1 { font-size: 40px; }
