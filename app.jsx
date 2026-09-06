@@ -53,6 +53,7 @@ function App() {
   const [query, setQuery] = useState("");
   const [cart, setCart] = useState(0);
   const [cartItems, setCartItems] = useState([]);
+  const [cartMessage, setCartMessage] = useState("");
   const [favoriteIds, setFavoriteIds] = useState([]);
   const [wishlistItems, setWishlistItems] = useState([]);
   const [activePanel, setActivePanel] = useState(null);
@@ -97,7 +98,13 @@ function App() {
 
   useEffect(() => {
     if (!window.valCareAuth) return undefined;
+    let authRequest = 0;
     return window.valCareAuth.onAuthStateChanged(async (user) => {
+      const requestId = ++authRequest;
+      setCart(0);
+      setCartItems([]);
+      setWishlistItems([]);
+      setFavoriteIds([]);
       const displayName = user?.displayName || user?.email?.split("@")[0] || "";
       setUserName(displayName.trim().split(/\s+/)[0]);
       if (!user) {
@@ -107,8 +114,10 @@ function App() {
       const token = await user.getIdTokenResult();
       const setup = await window.valCareDb?.collection("adminStatus").doc("config").get();
       const isSetupOwner = setup?.exists && setup.data().createdBy === user.uid;
+      if (requestId !== authRequest || window.valCareAuth.currentUser?.uid !== user.uid) return;
       setIsAdmin(token.claims.admin === true || isSetupOwner);
       const wishlist = await window.valCareDb?.collection("wishlists").doc(user.uid).get();
+      if (requestId !== authRequest || window.valCareAuth.currentUser?.uid !== user.uid) return;
       const savedItems = wishlist?.exists ? wishlist.data().items || [] : [];
       setWishlistItems(savedItems);
       setFavoriteIds(savedItems.map((item) => String(item.id)));
@@ -178,7 +187,8 @@ function App() {
     }
     setCart((current) => current + 1);
     setCartItems((current) => [...current, product]);
-    setActivePanel("cart");
+    setCartMessage(`${product.name} added to cart.`);
+    window.setTimeout(() => setCartMessage(""), 2200);
     window.trackValCareEvent?.("add_to_cart", { item_name: product.name, value: product.price * currencies[currency].rate, currency });
   };
 
@@ -519,6 +529,10 @@ function App() {
   };
 
   const logOut = async () => {
+    setCart(0);
+    setCartItems([]);
+    setWishlistItems([]);
+    setFavoriteIds([]);
     await window.valCareAuth?.signOut();
     setActivePanel(null);
   };
@@ -551,6 +565,7 @@ function App() {
   return (
     <>
       <div className="announcement">Free delivery on UCC campus.</div>
+      {cartMessage && <div className="cart-toast" role="status" aria-live="polite">{cartMessage}</div>}
       <header className="navbar">
         <a className="logo" href="#top" aria-label="Val's Glam Accessories home"><img className="brand-logo" src="vals.jpg" alt="Val's Glam Accessories" /><span className="logo-name">Val's Glam Accessories</span></a>
         <nav className="nav-links" aria-label="Main navigation">
