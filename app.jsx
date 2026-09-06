@@ -343,26 +343,35 @@ function App() {
 
   const updatePassword = async (event) => {
     event.preventDefault();
-    if (!password.current || !password.next || password.next !== password.confirm) {
+    const user = window.valCareAuth?.currentUser;
+    const hasPasswordProvider = user?.providerData?.some((provider) => provider.providerId === "password");
+    if ((!hasPasswordProvider && !password.next) || (hasPasswordProvider && !password.current) || !password.next || password.next !== password.confirm) {
       setPasswordMessage(language === "fr" ? "Vérifiez vos informations." : language === "tw" ? "Yɛsrɛ sɛ hwɛ wo nsɛm no mu." : "Check your password details.");
       return;
     }
-    if (!window.valCareAuth?.currentUser) {
+    if (!user) {
       setPasswordMessage(language === "fr" ? "Connectez-vous pour changer votre mot de passe." : language === "tw" ? "Yɛsrɛ sɛ login ansa na woasesa password." : "Sign in to change your password.");
       return;
     }
     try {
-      const user = window.valCareAuth.currentUser;
-      if (!user.email) throw { code: "auth/provider-not-password" };
-      const credential = firebase.auth.EmailAuthProvider.credential(user.email, password.current);
-      await user.reauthenticateWithCredential(credential);
-      await user.updatePassword(password.next);
+      if (hasPasswordProvider) {
+        const credential = firebase.auth.EmailAuthProvider.credential(user.email, password.current);
+        await user.reauthenticateWithCredential(credential);
+        await user.updatePassword(password.next);
+      } else {
+        if (!user.email) throw { code: "auth/invalid-email" };
+        const provider = new firebase.auth.GoogleAuthProvider();
+        await user.reauthenticateWithPopup(provider);
+        await user.linkWithCredential(firebase.auth.EmailAuthProvider.credential(user.email, password.next));
+      }
     } catch (error) {
-      setPasswordMessage(error.code === "auth/provider-not-password" ? "This account uses Google sign-in. Reauthenticate with Google to change its security details." : error.code === "auth/wrong-password" || error.code === "auth/invalid-credential" ? "The current password is incorrect." : error.code === "auth/requires-recent-login" ? "Please sign in again before changing your password." : "Password update failed. Please try again.");
+      setPasswordMessage(error.code === "auth/popup-closed-by-user" ? "Google reauthentication was cancelled." : error.code === "auth/credential-already-in-use" || error.code === "auth/email-already-in-use" ? "This email already has another account." : error.code === "auth/wrong-password" || error.code === "auth/invalid-credential" ? "The current password is incorrect." : error.code === "auth/requires-recent-login" ? "Please sign in again with Google, then try again." : "Password update failed. Please try again.");
       return;
     }
     setPassword({ current: "", next: "", confirm: "" });
-    setPasswordMessage(language === "fr" ? "Mot de passe mis à jour." : language === "tw" ? "Wɔasesa password no." : "Password updated successfully.");
+    setPasswordMessage(hasPasswordProvider
+      ? language === "fr" ? "Mot de passe mis à jour." : language === "tw" ? "Wɔasesa password no." : "Password updated successfully."
+      : "Email/password login is now enabled for this account.");
   };
 
   const updateAdminEmail = async (event) => {
@@ -736,7 +745,7 @@ function App() {
             <div className="setting-control"><label htmlFor="theme">{text.theme}</label><select id="theme" value={theme} onChange={(event) => setTheme(event.target.value)}><option value="light">{text.light}</option><option value="dark">{text.dark}</option><option value="system">{text.system}</option></select></div>
             <div className="motion-control"><label htmlFor="cosmetic-motion">Cosmetic animations</label><input id="cosmetic-motion" type="range" min="0" max="100" step="5" value={cosmeticMotion} onChange={(event) => setCosmeticMotion(Number(event.target.value))} /><small>{cosmeticMotion === 0 ? "Off" : `${cosmeticMotion}% intensity`}</small></div>
             <label><span><strong>{text.orderUpdates}</strong><small>Get delivery and order notifications</small></span><input type="checkbox" checked={preferences.updates} onChange={() => setPreferences((current) => ({ ...current, updates: !current.updates }))} /></label><label><span><strong>{text.offers}</strong><small>Hear about fresh ValCare finds</small></span><input type="checkbox" checked={preferences.offers} onChange={() => setPreferences((current) => ({ ...current, offers: !current.offers }))} /></label>
-            <form className="password-form" onSubmit={updatePassword}><h3>{text.password}</h3><PasswordInput placeholder="Current password" value={password.current} onChange={(event) => setPassword({ ...password, current: event.target.value })} required /><PasswordInput placeholder="New password" value={password.next} onChange={(event) => setPassword({ ...password, next: event.target.value })} required /><PasswordInput placeholder="Confirm new password" value={password.confirm} onChange={(event) => setPassword({ ...password, confirm: event.target.value })} required /><button className="settings-save" type="submit">{text.save}</button>{passwordMessage && <small className="password-message">{passwordMessage}</small>}</form>
+            <form className="password-form" onSubmit={updatePassword}><h3>{text.password}</h3>{window.valCareAuth?.currentUser?.providerData?.some((provider) => provider.providerId === "password") && <PasswordInput placeholder="Current password" value={password.current} onChange={(event) => setPassword({ ...password, current: event.target.value })} required />}<PasswordInput placeholder="New password" value={password.next} onChange={(event) => setPassword({ ...password, next: event.target.value })} minLength="6" required /><PasswordInput placeholder="Confirm new password" value={password.confirm} onChange={(event) => setPassword({ ...password, confirm: event.target.value })} minLength="6" required /><button className="settings-save" type="submit">{window.valCareAuth?.currentUser?.providerData?.some((provider) => provider.providerId === "password") ? text.save : "Enable email/password login"}</button>{passwordMessage && <small className="password-message">{passwordMessage}</small>}</form>
             {isAdmin && <form className="password-form admin-security-form" onSubmit={updateAdminEmail}><h3>Admin email</h3><p className="account-intro">Changing the admin email requires your current password.</p><input type="email" placeholder="New admin email" value={newEmail} onChange={(event) => setNewEmail(event.target.value)} required /><PasswordInput placeholder="Current password" value={emailPassword} onChange={(event) => setEmailPassword(event.target.value)} required /><button className="settings-save" type="submit">Update admin email</button>{emailMessage && <small className="password-message">{emailMessage}</small>}</form>}
             <button className="settings-link" onClick={() => setActivePanel("transactions")}>{text.viewTransactions} <span>↗</span></button><button className="settings-logout" onClick={logOut}>Log out</button>
           </div>}
