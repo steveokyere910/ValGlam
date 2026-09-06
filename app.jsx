@@ -120,19 +120,6 @@ function App() {
       const isSetupOwner = setup?.exists && setup.data().createdBy === user.uid;
       if (requestId !== authRequest || window.valCareAuth.currentUser?.uid !== user.uid) return;
       setIsAdmin(token.claims.admin === true || isSetupOwner);
-      const wishlist = await window.valCareDb?.collection("wishlists").doc(user.uid).get();
-      if (requestId !== authRequest || window.valCareAuth.currentUser?.uid !== user.uid) return;
-      let savedItems = wishlist?.exists ? wishlist.data().items || [] : [];
-      if (!savedItems.length) {
-        try {
-          const cachedItems = JSON.parse(window.localStorage.getItem(`valcare-wishlist-${user.uid}`) || "[]");
-          if (Array.isArray(cachedItems)) savedItems = cachedItems;
-        } catch {
-          savedItems = [];
-        }
-      }
-      setWishlistItems(savedItems);
-      setFavoriteIds(savedItems.map((item) => String(item.id)));
       try {
         const savedCart = JSON.parse(window.localStorage.getItem(`valcare-cart-${user.uid}`) || "[]");
         if (Array.isArray(savedCart)) {
@@ -144,6 +131,27 @@ function App() {
         setCart(0);
       }
       cartHydrated.current = true;
+      try {
+        const wishlist = await window.valCareDb?.collection("wishlists").doc(user.uid).get();
+        if (requestId !== authRequest || window.valCareAuth.currentUser?.uid !== user.uid) return;
+        let savedItems = wishlist?.exists ? wishlist.data().items || [] : [];
+        if (!savedItems.length) {
+          const cachedItems = JSON.parse(window.localStorage.getItem(`valcare-wishlist-${user.uid}`) || "[]");
+          if (Array.isArray(cachedItems)) savedItems = cachedItems;
+        }
+        setWishlistItems(savedItems);
+        setFavoriteIds(savedItems.map((item) => String(item.id)));
+      } catch (error) {
+        try {
+          const cachedItems = JSON.parse(window.localStorage.getItem(`valcare-wishlist-${user.uid}`) || "[]");
+          const savedItems = Array.isArray(cachedItems) ? cachedItems : [];
+          setWishlistItems(savedItems);
+          setFavoriteIds(savedItems.map((item) => String(item.id)));
+        } catch {
+          setWishlistItems([]);
+          setFavoriteIds([]);
+        }
+      }
       const reference = new URLSearchParams(window.location.search).get("reference");
       if (reference && window.valCarePaymentApiUrl) {
         try {
