@@ -9,6 +9,7 @@ const firebaseConfig = {
 };
 
 window.valCarePaystackPublicKey = "pk_live_304204e9c806c48c9638865646cc5f4f7162a1ef";
+window.valCarePaymentApiUrl = "https://valcare-payments.frankokyere910.workers.dev";
 
 try {
   const app = firebase.initializeApp(firebaseConfig);
