@@ -28,6 +28,8 @@ cd ..
 firebase functions:secrets:set PAYSTACK_SECRET_KEY
 ```
 
+New-product and restock updates use free in-app notifications stored in Firestore. They appear under the bell icon for signed-in users. No email provider, API key, or paid Firebase plan is required.
+
 Paste the replacement secret only into the terminal prompt. Then deploy:
 
 ```text

@@ -58,6 +58,7 @@ function App() {
   const [cartMessage, setCartMessage] = useState("");
   const [favoriteIds, setFavoriteIds] = useState([]);
   const [wishlistItems, setWishlistItems] = useState([]);
+  const [notifications, setNotifications] = useState([]);
   const [activePanel, setActivePanel] = useState(null);
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [orderMessage, setOrderMessage] = useState("");
@@ -180,6 +181,26 @@ function App() {
     return window.valCareDb.collection("adminStatus").doc("config").onSnapshot((snapshot) => {
       setAdminSetupAvailable(!snapshot.exists);
     }, () => setAdminSetupAvailable(false));
+  }, []);
+
+  useEffect(() => {
+    if (!window.valCareDb || !window.valCareAuth) return undefined;
+    let unsubscribeNotifications = null;
+    const unsubscribeAuth = window.valCareAuth.onAuthStateChanged((user) => {
+      unsubscribeNotifications?.();
+      unsubscribeNotifications = null;
+      if (!user) {
+        setNotifications([]);
+        return;
+      }
+      unsubscribeNotifications = window.valCareDb.collection("notifications").orderBy("createdAt", "desc").limit(20).onSnapshot((snapshot) => {
+        setNotifications(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+      }, () => setNotifications([]));
+    });
+    return () => {
+      unsubscribeNotifications?.();
+      unsubscribeAuth();
+    };
   }, []);
 
   useEffect(() => {
@@ -380,8 +401,17 @@ function App() {
     setIsSavingProduct(true);
     try {
       const productId = productForm.id || `product-${Date.now()}`;
+      const previousProduct = productForm.id ? products.find((item) => String(item.id) === String(productId)) : null;
       const product = { id: String(productId), name: productForm.name.trim(), category: productForm.category, price, stock, icon: productForm.icon.trim() || "✨", tone: productForm.tone, tag: productForm.tag.trim(), imageUrl, updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
       await window.valCareDb.collection("products").doc(String(productId)).set(product, { merge: true });
+      const isRestock = previousProduct && stock > Number(previousProduct.stock || 0);
+      if (!previousProduct || isRestock) {
+        await window.valCareDb.collection("notifications").add({
+          title: previousProduct ? "Back in stock" : "New product",
+          message: previousProduct ? `${product.name} has been restocked.` : `${product.name} is now available in the shop.`,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      }
       setProducts((current) => productForm.id
         ? current.map((item) => String(item.id) === String(productId) ? { ...item, ...product } : item)
         : [...current, product]);
@@ -689,7 +719,7 @@ function App() {
             {!!cartItems.length && <><div className="cart-total"><span>Subtotal</span><strong>{formatPrice(cartTotal)}</strong></div><button className="primary-button checkout-button" onClick={placeOrder} disabled={isCheckingOut}>{isCheckingOut ? "Opening secure payment..." : "Pay securely with Paystack"}</button></>}
             {orderMessage && <small className="password-message order-message">{orderMessage}</small>}
           </div>}
-          {activePanel === "notifications" && <div className="panel-content notification-list"><div className="notice-item"><span className="notice-mark">✦</span><div><strong>Welcome to ValCare</strong><p>New little luxuries have landed in the shop.</p><small>Today</small></div></div><div className="notice-item"><span className="notice-mark">$</span><div><strong>Free delivery on UCC campus</strong><p>Enjoy delivery on your next ValCare order.</p><small>Yesterday</small></div></div></div>}
+          {activePanel === "notifications" && <div className="panel-content notification-list">{notifications.length ? notifications.map((notification) => <div className="notice-item" key={notification.id}><span className="notice-mark">✦</span><div><strong>{notification.title}</strong><p>{notification.message}</p><small>{notification.createdAt?.toDate?.().toLocaleDateString?.() || "Just now"}</small></div></div>) : <div className="panel-empty"><p>No new shop updates yet.</p></div>}</div>}
           {activePanel === "transactions" && <div className="panel-content"><div className="transaction-card"><div><strong>VC-1042</strong><span>Aug 28, 2026 · 2 items</span></div><strong>{formatPrice(34)}</strong><em>Delivered</em></div><div className="transaction-card"><div><strong>VC-0987</strong><span>Jul 14, 2026 · 1 item</span></div><strong>{formatPrice(18)}</strong><em>Delivered</em></div><div className="panel-empty"><p>Your purchases will appear here after checkout.</p></div></div>}
           {activePanel === "reviews" && selectedProduct && <div className="panel-content reviews-panel"><div className="reviews-product"><span className={`cart-thumb ${selectedProduct.tone}`}>{selectedProduct.icon}</span><div><strong>{selectedProduct.name}</strong><span>{formatPrice(selectedProduct.price)}</span></div></div><div className="review-list">{reviews.length ? reviews.map((review) => <article className="review-item" key={review.id}><div className="review-meta"><strong>{review.userName}</strong><span>{"★".repeat(review.rating)}{"☆".repeat(5 - review.rating)}</span></div><p>{review.comment}</p></article>) : <p className="review-empty">No reviews yet. Be the first to share your thoughts.</p>}</div><form className="review-form" onSubmit={submitReview}><label htmlFor="review-rating">Your rating</label><select id="review-rating" value={reviewRating} onChange={(event) => setReviewRating(event.target.value)}><option value="5">★★★★★</option><option value="4">★★★★☆</option><option value="3">★★★☆☆</option><option value="2">★★☆☆☆</option><option value="1">★☆☆☆☆</option></select><textarea value={reviewText} onChange={(event) => setReviewText(event.target.value)} placeholder="Share your thoughts" maxLength="500" required /><button className="settings-save" type="submit" disabled={isSubmittingReview}>{isSubmittingReview ? "Saving review..." : "Add review"}</button>{reviewMessage && <small className="password-message">{reviewMessage}</small>}</form></div>}
           {activePanel === "settings" && <div className="panel-content settings-list">

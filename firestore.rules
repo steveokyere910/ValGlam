@@ -94,6 +94,16 @@ service cloud.firestore {
 			allow delete: if signedIn() && resource.data.userId == request.auth.uid;
 		}
 
+		match /notifications/{notificationId} {
+			allow read: if signedIn();
+			allow create: if admin()
+				&& request.resource.data.keys().hasOnly(['title', 'message', 'createdAt'])
+				&& request.resource.data.title is string
+				&& request.resource.data.message is string
+				&& request.resource.data.createdAt is timestamp;
+			allow update, delete: if admin();
+		}
+
 		match /staff/{staffId} {
 			allow read, write: if admin();
 		}
