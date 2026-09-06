@@ -96,12 +96,28 @@ service cloud.firestore {
 		}
 
 		match /notifications/{notificationId} {
-			allow read: if signedIn();
-			allow create: if admin()
-				&& request.resource.data.keys().hasOnly(['title', 'message', 'createdAt'])
-				&& request.resource.data.title is string
-				&& request.resource.data.message is string
-				&& request.resource.data.createdAt is timestamp;
+			allow read: if signedIn()
+				&& ((resource.data.audience == 'all' && resource.data.recipientId == '')
+					|| (resource.data.audience == 'user' && resource.data.recipientId == request.auth.uid));
+			allow create: if (
+					admin()
+					&& request.resource.data.keys().hasOnly(['title', 'message', 'audience', 'recipientId', 'createdAt'])
+					&& request.resource.data.title is string
+					&& request.resource.data.message is string
+					&& request.resource.data.audience in ['all', 'user']
+					&& request.resource.data.recipientId is string
+					&& ((request.resource.data.audience == 'all' && request.resource.data.recipientId == '')
+						|| (request.resource.data.audience == 'user' && request.resource.data.recipientId == request.auth.uid))
+					&& request.resource.data.createdAt is timestamp
+				) || (
+					signedIn()
+					&& request.resource.data.keys().hasOnly(['title', 'message', 'audience', 'recipientId', 'createdAt'])
+					&& request.resource.data.title == 'Welcome to ValCare'
+					&& request.resource.data.message is string
+					&& request.resource.data.audience == 'user'
+					&& request.resource.data.recipientId == request.auth.uid
+					&& request.resource.data.createdAt is timestamp
+				);
 			allow update, delete: if admin();
 		}
 

@@ -124,7 +124,7 @@ function App() {
       cartOwnerUid.current = user?.uid || null;
       cartHydrated.current = false;
       const displayName = user?.displayName || user?.email?.split("@")[0] || "";
-      setUserName(displayName.trim());
+      setUserName(displayName.trim().split(/\s+/)[0] || "");
       if (!user) {
         setIsAdmin(false);
         return;
@@ -205,10 +205,13 @@ function App() {
 
   useEffect(() => {
     if (!window.valCareDb || !window.valCareAuth) return undefined;
-    let unsubscribeNotifications = null;
+    let unsubscribeBroadcastNotifications = null;
+    let unsubscribePersonalNotifications = null;
     const unsubscribeAuth = window.valCareAuth.onAuthStateChanged((user) => {
-      unsubscribeNotifications?.();
-      unsubscribeNotifications = null;
+      unsubscribeBroadcastNotifications?.();
+      unsubscribePersonalNotifications?.();
+      unsubscribeBroadcastNotifications = null;
+      unsubscribePersonalNotifications = null;
       if (!user) {
         setNotifications([]);
         setReadNotificationIds([]);
@@ -220,12 +223,31 @@ function App() {
       } catch {
         setReadNotificationIds([]);
       }
-      unsubscribeNotifications = window.valCareDb.collection("notifications").orderBy("createdAt", "desc").limit(20).onSnapshot((snapshot) => {
-        setNotifications(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-      }, () => setNotifications([]));
+      let broadcastNotifications = [];
+      let personalNotifications = [];
+      const updateNotifications = () => {
+        const merged = [...broadcastNotifications, ...personalNotifications];
+        merged.sort((left, right) => (right.createdAt?.toMillis?.() || 0) - (left.createdAt?.toMillis?.() || 0));
+        setNotifications(merged.slice(0, 20));
+      };
+      unsubscribeBroadcastNotifications = window.valCareDb.collection("notifications").where("audience", "==", "all").limit(20).onSnapshot((snapshot) => {
+        broadcastNotifications = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+        updateNotifications();
+      }, () => {
+        broadcastNotifications = [];
+        updateNotifications();
+      });
+      unsubscribePersonalNotifications = window.valCareDb.collection("notifications").where("audience", "==", "user").where("recipientId", "==", user.uid).limit(20).onSnapshot((snapshot) => {
+        personalNotifications = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+        updateNotifications();
+      }, () => {
+        personalNotifications = [];
+        updateNotifications();
+      });
     });
     return () => {
-      unsubscribeNotifications?.();
+      unsubscribeBroadcastNotifications?.();
+      unsubscribePersonalNotifications?.();
       unsubscribeAuth();
     };
   }, []);
@@ -482,6 +504,8 @@ function App() {
         await window.valCareDb.collection("notifications").add({
           title: reachedLowStock ? "Low stock alert" : previousProduct ? "Back in stock" : "New product",
           message: reachedLowStock ? `Only 1 ${product.name} is left in stock.` : previousProduct ? `${product.name} has been restocked.` : `${product.name} is now available in the shop.`,
+          audience: "all",
+          recipientId: "",
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
       }
@@ -561,7 +585,20 @@ function App() {
         setAdminMode(false);
         setIsAdmin(true);
       }
-      setUserName(account.name.trim());
+      if (window.valCareDb) {
+        try {
+          await window.valCareDb.collection("notifications").add({
+            title: "Welcome to ValCare",
+            message: `Welcome, ${account.name.trim().split(/\s+/)[0] || "friend"}! We are happy to have you here.`,
+            audience: "user",
+            recipientId: credential.user.uid,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+        } catch (notificationError) {
+          console.error("Welcome notification could not be created", notificationError);
+        }
+      }
+      setUserName(account.name.trim().split(/\s+/)[0] || "");
       setAccount({ name: "", email: "", password: "", confirm: "" });
       setAccountMessage("");
       setActivePanel(null);
@@ -739,18 +776,17 @@ function App() {
         <nav className="nav-links" aria-label="Main navigation">
           <a href="#shop">{text.shop}</a><a href="#shop">{text.beauty}</a><a href="#shop">{text.lifestyle}</a><a href="#about">{text.story}</a><a href="#locations">{text.locate}</a>
         </nav>
-        <div className={`nav-actions ${isAdmin ? "admin-nav-actions" : ""}`}>
-          {userName ? <button className={`user-name ${isAdmin ? "admin-user-name" : ""}`} onClick={() => setActivePanel(isAdmin ? "inventory" : "settings")} aria-label={isAdmin ? "Open admin dashboard" : "Open account settings"} title={userName}><span className="user-avatar">{userName.charAt(0).toUpperCase()}</span><span className="user-identity"><span className="user-display-name">{userName}</span>{isAdmin && <small>Admin</small>}</span></button> : <button className="login-link" onClick={() => { setAuthMode("login"); setAccountMessage(""); setActivePanel("auth"); }}>Log in</button>}
-          {!isAdmin && <button className="icon-button" aria-label="Search products" onClick={() => document.getElementById("product-search").focus()}><SearchIcon /></button>}
+        <div className={`nav-actions ${isAdmin ? "admin-nav-actions" : "client-nav-actions"}`}>
+          {userName ? <button className={`user-name ${isAdmin ? "admin-user-name" : ""}`} onClick={() => setActivePanel(isAdmin ? "inventory" : "settings")} aria-label={isAdmin ? "Open admin dashboard" : "Open account settings"} title={userName}><span className="user-avatar">{userName.charAt(0).toUpperCase()}</span><span className="user-display-name">{userName}</span></button> : <button className="login-link" onClick={() => { setAuthMode("login"); setAccountMessage(""); setActivePanel("auth"); }}>Log in</button>}
+          {!isAdmin && <button className="icon-button panel-trigger" aria-label={`View notifications${unreadNotificationCount ? `, ${unreadNotificationCount} unread` : ""}`} title="Notifications" onClick={openNotifications}><BellIcon />{unreadNotificationCount > 0 && <span className="cart-count notification-count">{unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}</span>}</button>}
+          {!isAdmin && userName && <button className="icon-button" aria-label="Open favorite products" title="Wishlist" onClick={() => setActivePanel("wishlist")}>♡<span className="cart-count">{wishlistItems.length}</span></button>}
+          {!isAdmin && <button className="icon-button settings-button" aria-label="Open settings" title="Settings" onClick={() => setActivePanel("settings")}><SettingsIcon /></button>}
           <div className={`secondary-nav-actions ${isMobileMenuOpen ? "open" : ""}`}>
-            <button className="icon-button panel-trigger" aria-label={`View notifications${unreadNotificationCount ? `, ${unreadNotificationCount} unread` : ""}`} onClick={openNotifications}><BellIcon />{unreadNotificationCount > 0 && <span className="cart-count notification-count">{unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}</span>}</button>
-            {isAdmin && <button className="icon-button admin-inventory-icon" aria-label="Manage products and stock" onClick={() => { resetProductForm(); setActivePanel("inventory"); }}>✦</button>}
-            {isAdmin && <button className="icon-button" aria-label="Open sales report" onClick={openAdminReport}>▥</button>}
-            {userName && !isAdmin && <button className="icon-button" aria-label="Open favorite products" onClick={() => setActivePanel("wishlist")}>♡<span className="cart-count">{wishlistItems.length}</span></button>}
-            <button className="icon-button settings-button" aria-label="Open settings" onClick={() => setActivePanel("settings")}><SettingsIcon /></button>
+            {isAdmin && <button className="icon-button admin-inventory-icon" aria-label="Manage products and stock" title="Manage products" onClick={() => { resetProductForm(); setActivePanel("inventory"); }}>✦</button>}
+            {isAdmin && <button className="icon-button" aria-label="Open sales report" title="Sales report" onClick={openAdminReport}>▥</button>}
           </div>
-          <button className="icon-button mobile-more-button" aria-label="More header actions" aria-expanded={isMobileMenuOpen} onClick={() => setIsMobileMenuOpen((current) => !current)}><span aria-hidden="true">•••</span></button>
-          {!isAdmin && <button className="icon-button" aria-label={`${cart} items in bag`} onClick={() => setActivePanel("cart")}><BagIcon /><span className="cart-count">{cart}</span></button>}
+          {isAdmin && <button className="icon-button mobile-more-button" aria-label="More header actions" title="More admin actions" aria-expanded={isMobileMenuOpen} onClick={() => setIsMobileMenuOpen((current) => !current)}><span aria-hidden="true">•••</span></button>}
+          {!isAdmin && <button className="icon-button" aria-label={`${cart} items in bag`} title="Shopping bag" onClick={() => setActivePanel("cart")}><BagIcon /><span className="cart-count">{cart}</span></button>}
         </div>
       </header>
 
