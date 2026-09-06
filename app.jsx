@@ -534,23 +534,45 @@ function App() {
       setProductMessage("Image upload is unavailable. Check your admin access and try again.");
       return;
     }
-    if (!file.type.startsWith("image/") || file.size > 5 * 1024 * 1024) {
-      setProductMessage("Choose an image smaller than 5 MB.");
+    const fileExtension = file.name.split(".").pop()?.toLowerCase();
+    const fileType = file.type.toLowerCase();
+    const isHeicFile = ["heic", "heif"].includes(fileExtension) || ["image/heic", "image/heif", "image/heic-sequence", "image/heif-sequence"].includes(fileType);
+    const isImageFile = fileType.startsWith("image/") || ["jpg", "jpeg", "png", "webp", "gif", "heic", "heif"].includes(fileExtension);
+    if (!isImageFile || (!isHeicFile && file.size > 5 * 1024 * 1024) || (isHeicFile && file.size > 20 * 1024 * 1024)) {
+      setProductMessage("Choose a JPG, PNG, WEBP, GIF, HEIC, or HEIF image. The converted image must be smaller than 5 MB.");
       event.target.value = "";
       return;
     }
     setIsUploadingImage(true);
     setProductMessage("");
     try {
-      const safeName = file.name.replace(/[^a-z0-9._-]/gi, "-");
+      let uploadFile = file;
+      let contentType = fileType || ({ jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", gif: "image/gif" }[fileExtension] || "");
+      if (isHeicFile) {
+        if (typeof window.heic2any !== "function") {
+          throw new Error("HEIC conversion is unavailable.");
+        }
+        const converted = await window.heic2any({ blob: file, toType: "image/jpeg", quality: 0.9 });
+        uploadFile = Array.isArray(converted) ? converted[0] : converted;
+        contentType = "image/jpeg";
+      }
+      if (uploadFile.size > 5 * 1024 * 1024) {
+        throw new Error("The converted image is larger than 5 MB.");
+      }
+      const originalName = isHeicFile ? file.name.replace(/\.[^.]+$/, ".jpg") : file.name;
+      const safeName = originalName.replace(/[^a-z0-9._-]/gi, "-");
       const path = `productImages/${user.uid}/${Date.now()}-${safeName}`;
-      const snapshot = await window.valCareStorage.ref(path).put(file, { contentType: file.type });
+      const snapshot = await window.valCareStorage.ref(path).put(uploadFile, { contentType });
       const imageUrl = await snapshot.ref.getDownloadURL();
       setProductForm((current) => ({ ...current, imageUrl }));
       setProductMessage("Image uploaded. Save the product to apply it.");
     } catch (error) {
       console.error("Product image upload failed", error);
-      setProductMessage("Image upload failed. Check Storage access and try again.");
+      setProductMessage(error.message === "The converted image is larger than 5 MB."
+        ? "The converted image is larger than 5 MB. Choose a smaller picture."
+        : isHeicFile
+          ? "This HEIC/HEIF image could not be converted. Choose a JPG or PNG picture instead."
+          : "Image upload failed. Check Storage access and try again.");
     } finally {
       setIsUploadingImage(false);
       event.target.value = "";
@@ -873,7 +895,7 @@ function App() {
             <button className="settings-link" onClick={() => setActivePanel("transactions")}>{text.viewTransactions} <span>↗</span></button><button className="settings-logout" onClick={confirmLogout}>Log out</button>
           </div>}
           {activePanel === "inventory" && isAdmin && <div className="panel-content inventory-panel"><p className="account-intro">Update prices, add new items, and keep stock levels current.</p><form className="product-admin-form" onSubmit={saveProduct}><input placeholder="Product name" value={productForm.name} onChange={(event) => setProductForm({ ...productForm, name: event.target.value })} required /><div className="admin-form-row"><select value={productForm.category} onChange={(event) => setProductForm({ ...productForm, category: event.target.value })}><option>Beauty</option><option>Accessories</option><option>Home</option><option>Lifestyle</option></select><input type="number" min="0" step="0.01" placeholder="Price" value={productForm.price} onChange={(event) => setProductForm({ ...productForm, price: event.target.value })} required /><input type="number" min="0" step="1" placeholder="Stock" value={productForm.stock} onChange={(event) => setProductForm({ ...productForm, stock: event.target.value })} required /></div><div className="admin-form-row"><input placeholder="Icon emoji" value={productForm.icon} onChange={(event) => setProductForm({ ...productForm, icon: event.target.value })} /><select value={productForm.tone} onChange={(event) => setProductForm({ ...productForm, tone: event.target.value })}><option value="tone-rose">Rose</option><option value="tone-sage">Sage</option><option value="tone-yellow">Yellow</option><option value="tone-lilac">Lilac</option><option value="tone-blue">Blue</option><option value="tone-peach">Peach</option><option value="tone-pink">Pink</option><option value="tone-green">Green</option></select><input placeholder="Tag (optional)" value={productForm.tag} onChange={(event) => setProductForm({ ...productForm, tag: event.target.value })} /></div><div className="admin-form-actions"><button className="settings-save" type="submit" disabled={isSavingProduct}>{isSavingProduct ? "Saving..." : productForm.id ? "Update product" : "Add product"}</button>{productForm.id && <button className="settings-link" type="button" onClick={resetProductForm}>Cancel edit</button>}</div>{productMessage && <small className="password-message">{productMessage}</small>}</form><div className="inventory-list">{products.map((product) => <button className="inventory-item" key={product.id} type="button" onClick={() => editProduct(product)}><span className={`cart-thumb ${product.tone}`}>{product.icon}</span><span><strong>{product.name}</strong><small>{formatPrice(product.price)} · {product.stock} in stock</small></span><em>Edit</em></button>)}</div></div>}
-          {activePanel === "inventory" && isAdmin && <div className="product-image-url-field"><label htmlFor="product-image-file">Choose product picture</label><input id="product-image-file" type="file" accept="image/*,.heic,.heif" onChange={uploadProductImage} disabled={isUploadingImage} /><small>{isUploadingImage ? "Uploading image..." : productForm.id ? "Choose a replacement from iPhone Photos, Android Gallery, or your camera." : "Choose from iPhone Photos, Android Gallery, or your camera."}</small><label htmlFor="product-image-url">Image URL</label><input id="product-image-url" type="url" placeholder="https://..." value={productForm.imageUrl} onChange={(event) => setProductForm({ ...productForm, imageUrl: event.target.value })} /></div>}
+          {activePanel === "inventory" && isAdmin && <div className="product-image-url-field"><label htmlFor="product-image-file">Choose product picture</label><input id="product-image-file" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif" onChange={uploadProductImage} disabled={isUploadingImage} /><small>{isUploadingImage ? "Uploading image..." : productForm.id ? "Choose a picture replacement from your phone gallery or camera." : "Choose a picture from your phone gallery or camera."}</small><label htmlFor="product-image-url">Image URL</label><input id="product-image-url" type="url" placeholder="https://..." value={productForm.imageUrl} onChange={(event) => setProductForm({ ...productForm, imageUrl: event.target.value })} /></div>}
         {activePanel === "inventory" && isAdmin && productForm.id && <button className="settings-link" type="button" onClick={() => confirmDeleteProduct(products.find((product) => String(product.id) === String(productForm.id)))}>Delete selected product</button>}
         </aside>
       </div>}
