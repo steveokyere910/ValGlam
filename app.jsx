@@ -59,14 +59,16 @@ function App() {
   const [favoriteIds, setFavoriteIds] = useState([]);
   const [wishlistItems, setWishlistItems] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [adminOrders, setAdminOrders] = useState([]);
+  const [isLoadingReport, setIsLoadingReport] = useState(false);
   const [activePanel, setActivePanel] = useState(null);
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [orderMessage, setOrderMessage] = useState("");
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [preferences, setPreferences] = useState({ updates: true, offers: false });
   const [currency, setCurrency] = useState("GHS");
-  const [language, setLanguage] = useState("en");
-  const [theme, setTheme] = useState("light");
+  const [language, setLanguage] = useState(() => ["en", "tw", "fr"].includes(window.localStorage.getItem("valcare-language")) ? window.localStorage.getItem("valcare-language") : "en");
+  const [theme, setTheme] = useState(() => ["light", "dark", "system"].includes(window.localStorage.getItem("valcare-theme")) ? window.localStorage.getItem("valcare-theme") : "light");
   const [cosmeticMotion, setCosmeticMotion] = useState(65);
   const [password, setPassword] = useState({ current: "", next: "", confirm: "" });
   const [passwordMessage, setPasswordMessage] = useState("");
@@ -98,6 +100,14 @@ function App() {
   useEffect(() => {
     document.documentElement.style.setProperty("--motion-scale", `${cosmeticMotion / 65}`);
   }, [cosmeticMotion]);
+
+  useEffect(() => {
+    window.localStorage.setItem("valcare-language", language);
+  }, [language]);
+
+  useEffect(() => {
+    window.localStorage.setItem("valcare-theme", theme);
+  }, [theme]);
 
   useEffect(() => {
     if (!window.valCareAuth) return undefined;
@@ -287,10 +297,37 @@ function App() {
     }
   };
 
+  const openAdminReport = async () => {
+    if (!isAdmin || !window.valCareDb || isLoadingReport) return;
+    setIsLoadingReport(true);
+    setActivePanel("report");
+    try {
+      const snapshot = await window.valCareDb.collection("orders").orderBy("createdAt", "desc").limit(200).get();
+      setAdminOrders(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+    } catch (error) {
+      setAdminOrders([]);
+      setProductMessage("Could not load the sales report.");
+    } finally {
+      setIsLoadingReport(false);
+    }
+  };
+
   const removeFromBag = (index) => {
     setCartItems((current) => current.filter((_, itemIndex) => itemIndex !== index));
     setCart((current) => Math.max(0, current - 1));
   };
+
+  const salesSummary = adminOrders.reduce((summary, order) => {
+    (order.items || []).forEach((item) => {
+      const key = String(item.id);
+      const existing = summary.get(key) || { name: item.name, quantity: 0, revenue: 0 };
+      existing.quantity += 1;
+      existing.revenue += Number(item.price) || 0;
+      summary.set(key, existing);
+    });
+    return summary;
+  }, new Map());
+  const bestSellingProducts = [...salesSummary.values()].sort((left, right) => right.quantity - left.quantity || right.revenue - left.revenue);
 
   const placeOrder = async () => {
     if (!cartItems.length || isCheckingOut) return;
@@ -662,6 +699,7 @@ function App() {
           <button className="icon-button panel-trigger" aria-label="View notifications" onClick={() => setActivePanel("notifications")}><BellIcon /><span className="notification-dot" /></button>
           <button className="icon-button" aria-label="Open settings" onClick={() => setActivePanel("settings")}><SettingsIcon /></button>
           {isAdmin && <button className="icon-button admin-inventory-icon" aria-label="Manage products and stock" onClick={() => { resetProductForm(); setActivePanel("inventory"); }}>✦</button>}
+          {isAdmin && <button className="icon-button" aria-label="Open sales report" onClick={openAdminReport}>▥</button>}
           {userName && <button className="icon-button" aria-label="Open favorite products" onClick={() => setActivePanel("wishlist")}>♡<span className="cart-count">{wishlistItems.length}</span></button>}
           <button className="icon-button" aria-label={`${cart} items in bag`} onClick={() => setActivePanel("cart")}><BagIcon /><span className="cart-count">{cart}</span></button>
         </div>
@@ -726,7 +764,7 @@ function App() {
       </footer>
       {activePanel && <div className="panel-backdrop" onClick={closePanel}>
         <aside className={`account-panel theme-${theme}`} onClick={(event) => event.stopPropagation()}>
-          <div className="panel-header"><div><p className="eyebrow">ValCare account</p><h2>{activePanel === "cart" ? text.cart : activePanel === "notifications" ? text.notifications : activePanel === "transactions" ? text.transactions : activePanel === "reviews" ? "Product reviews" : activePanel === "inventory" ? "Manage products" : activePanel === "create-account" || (activePanel === "auth" && authMode === "create") ? "Create your account" : activePanel === "auth" ? "Log in" : text.settings}</h2></div><button className="close-button" onClick={closePanel} aria-label="Close panel">×</button></div>
+          <div className="panel-header"><div><p className="eyebrow">ValCare account</p><h2>{activePanel === "cart" ? text.cart : activePanel === "notifications" ? text.notifications : activePanel === "transactions" ? text.transactions : activePanel === "report" ? "Sales report" : activePanel === "reviews" ? "Product reviews" : activePanel === "inventory" ? "Manage products" : activePanel === "create-account" || (activePanel === "auth" && authMode === "create") ? "Create your account" : activePanel === "auth" ? "Log in" : text.settings}</h2></div><button className="close-button" onClick={closePanel} aria-label="Close panel">×</button></div>
           {(activePanel === "create-account" || activePanel === "auth") && <div className="panel-content account-form"><p className="account-intro">{authMode === "create" ? "Create your account to collect your ValCare finds." : "Log in to continue shopping and manage your account."}</p><div className="social-auth-grid"><button className="social-auth-button google-auth-button" type="button" onClick={() => signInWithProvider("Google")}><ProviderLogo name="Google" />Continue with Google</button></div><div className="form-divider"><span>or use email</span></div><form onSubmit={authMode === "create" ? createAccount : login}>{authMode === "create" && <input type="text" placeholder="Your name" value={account.name} onChange={(event) => setAccount({ ...account, name: event.target.value })} required />}<input type="email" placeholder="Email address" value={account.email} onChange={(event) => setAccount({ ...account, email: event.target.value })} required /><PasswordInput placeholder="Password" value={account.password} onChange={(event) => setAccount({ ...account, password: event.target.value })} minLength="6" required />{authMode === "create" && <PasswordInput placeholder="Confirm password" value={account.confirm} onChange={(event) => setAccount({ ...account, confirm: event.target.value })} minLength="6" required />}<button className="settings-save" type="submit">{authMode === "create" ? "Create account" : "Log in"}</button>{accountMessage && <small className="password-message">{accountMessage}</small>}</form><button className="auth-switch" type="button" onClick={() => { setAuthMode(authMode === "create" ? "login" : "create"); setAdminMode(false); setAccountMessage(""); }}>{authMode === "create" ? "Already have an account? Log in" : "New to ValCare? Create an account"}</button></div>}
           {activePanel === "wishlist" && <div className="panel-content"><div className="wishlist-list">{wishlistItems.length ? wishlistItems.map((product) => <article className="wishlist-item" key={product.id}><span className={`cart-thumb ${product.tone}`}>{product.icon}</span><div><strong>{product.name}</strong><span>{formatPrice(product.price)}</span></div><button className="add-button" type="button" onClick={() => addToBag(product)}>Add to bag</button><button className="remove-item" type="button" onClick={() => toggleFavorite(product)} aria-label={`Remove ${product.name} from favorites`}>×</button></article>) : <div className="panel-empty"><p>Your favorite products will appear here.</p></div>}</div></div>}
           {activePanel === "cart" && <div className="panel-content">
@@ -738,6 +776,7 @@ function App() {
           </div>}
           {activePanel === "notifications" && <div className="panel-content notification-list">{notifications.length ? notifications.map((notification) => <div className="notice-item" key={notification.id}><span className="notice-mark">✦</span><div><strong>{notification.title}</strong><p>{notification.message}</p><small>{notification.createdAt?.toDate?.().toLocaleDateString?.() || "Just now"}</small></div></div>) : <div className="panel-empty"><p>No new shop updates yet.</p></div>}</div>}
           {activePanel === "transactions" && <div className="panel-content"><div className="transaction-card"><div><strong>VC-1042</strong><span>Aug 28, 2026 · 2 items</span></div><strong>{formatPrice(34)}</strong><em>Delivered</em></div><div className="transaction-card"><div><strong>VC-0987</strong><span>Jul 14, 2026 · 1 item</span></div><strong>{formatPrice(18)}</strong><em>Delivered</em></div><div className="panel-empty"><p>Your purchases will appear here after checkout.</p></div></div>}
+          {activePanel === "report" && isAdmin && <div className="panel-content report-panel">{isLoadingReport ? <p className="panel-empty">Loading sales report...</p> : <><section className="report-section"><h3>Best-selling products</h3>{bestSellingProducts.length ? bestSellingProducts.slice(0, 10).map((product) => <div className="report-row" key={product.name}><span><strong>{product.name}</strong><small>{product.quantity} sold</small></span><strong>{formatPrice(product.revenue)}</strong></div>) : <p className="panel-empty">No completed transactions yet.</p>}</section><section className="report-section"><h3>Customer transactions</h3>{adminOrders.length ? adminOrders.map((order) => <div className="report-order" key={order.id}><div><strong>{order.customerName || order.customerEmail || "Customer"}</strong><small>{order.customerEmail || ""}</small><small>{order.items?.length || 0} item(s) · {order.status || "paid"}</small></div><strong>{formatPrice(order.total || 0)}</strong></div>) : <p className="panel-empty">No transactions yet.</p>}</section></>}</div>}
           {activePanel === "reviews" && selectedProduct && <div className="panel-content reviews-panel"><div className="reviews-product"><span className={`cart-thumb ${selectedProduct.tone}`}>{selectedProduct.icon}</span><div><strong>{selectedProduct.name}</strong><span>{formatPrice(selectedProduct.price)}</span></div></div><div className="review-list">{reviews.length ? reviews.map((review) => <article className="review-item" key={review.id}><div className="review-meta"><strong>{review.userName}</strong><span>{"★".repeat(review.rating)}{"☆".repeat(5 - review.rating)}</span></div><p>{review.comment}</p></article>) : <p className="review-empty">No reviews yet. Be the first to share your thoughts.</p>}</div><form className="review-form" onSubmit={submitReview}><label htmlFor="review-rating">Your rating</label><select id="review-rating" value={reviewRating} onChange={(event) => setReviewRating(event.target.value)}><option value="5">★★★★★</option><option value="4">★★★★☆</option><option value="3">★★★☆☆</option><option value="2">★★☆☆☆</option><option value="1">★☆☆☆☆</option></select><textarea value={reviewText} onChange={(event) => setReviewText(event.target.value)} placeholder="Share your thoughts" maxLength="500" required /><button className="settings-save" type="submit" disabled={isSubmittingReview}>{isSubmittingReview ? "Saving review..." : "Add review"}</button>{reviewMessage && <small className="password-message">{reviewMessage}</small>}</form></div>}
           {activePanel === "settings" && <div className="panel-content settings-list">
             <div className="setting-control"><label htmlFor="currency">{text.currency}</label><select id="currency" value={currency} onChange={(event) => setCurrency(event.target.value)}>{Object.keys(currencies).map((code) => <option key={code} value={code}>{code} ({currencies[code].symbol})</option>)}</select></div>
