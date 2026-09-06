@@ -55,7 +55,6 @@ function App() {
   const [cartItems, setCartItems] = useState([]);
   const cartOwnerUid = useRef(null);
   const cartHydrated = useRef(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [cartMessage, setCartMessage] = useState("");
   const [favoriteIds, setFavoriteIds] = useState([]);
   const [wishlistItems, setWishlistItems] = useState([]);
@@ -781,11 +780,10 @@ function App() {
           {!isAdmin && <button className="icon-button panel-trigger" aria-label={`View notifications${unreadNotificationCount ? `, ${unreadNotificationCount} unread` : ""}`} title="Notifications" onClick={openNotifications}><BellIcon />{unreadNotificationCount > 0 && <span className="cart-count notification-count">{unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}</span>}</button>}
           {!isAdmin && userName && <button className="icon-button" aria-label="Open favorite products" title="Wishlist" onClick={() => setActivePanel("wishlist")}>♡<span className="cart-count">{wishlistItems.length}</span></button>}
           {!isAdmin && <button className="icon-button settings-button" aria-label="Open settings" title="Settings" onClick={() => setActivePanel("settings")}><SettingsIcon /></button>}
-          <div className={`secondary-nav-actions ${isMobileMenuOpen ? "open" : ""}`}>
+          <div className="secondary-nav-actions">
             {isAdmin && <button className="icon-button admin-inventory-icon" aria-label="Manage products and stock" title="Manage products" onClick={() => { resetProductForm(); setActivePanel("inventory"); }}>✦</button>}
             {isAdmin && <button className="icon-button" aria-label="Open sales report" title="Sales report" onClick={openAdminReport}>▥</button>}
           </div>
-          {isAdmin && <button className="icon-button mobile-more-button" aria-label="More header actions" title="More admin actions" aria-expanded={isMobileMenuOpen} onClick={() => setIsMobileMenuOpen((current) => !current)}><span aria-hidden="true">•••</span></button>}
           {!isAdmin && <button className="icon-button" aria-label={`${cart} items in bag`} title="Shopping bag" onClick={() => setActivePanel("cart")}><BagIcon /><span className="cart-count">{cart}</span></button>}
         </div>
       </header>
