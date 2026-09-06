@@ -1,4 +1,4 @@
-const { useEffect, useState } = React;
+const { useEffect, useRef, useState } = React;
 
 const defaultProducts = [
   { id: 1, name: "Bloom perfume oil", category: "Beauty", price: 18, stock: 12, icon: "🧴", tone: "tone-rose", tag: "Bestseller" },
@@ -53,6 +53,8 @@ function App() {
   const [query, setQuery] = useState("");
   const [cart, setCart] = useState(0);
   const [cartItems, setCartItems] = useState([]);
+  const cartOwnerUid = useRef(null);
+  const cartHydrated = useRef(false);
   const [cartMessage, setCartMessage] = useState("");
   const [favoriteIds, setFavoriteIds] = useState([]);
   const [wishlistItems, setWishlistItems] = useState([]);
@@ -105,6 +107,8 @@ function App() {
       setCartItems([]);
       setWishlistItems([]);
       setFavoriteIds([]);
+      cartOwnerUid.current = user?.uid || null;
+      cartHydrated.current = false;
       const displayName = user?.displayName || user?.email?.split("@")[0] || "";
       setUserName(displayName.trim().split(/\s+/)[0]);
       if (!user) {
@@ -118,9 +122,28 @@ function App() {
       setIsAdmin(token.claims.admin === true || isSetupOwner);
       const wishlist = await window.valCareDb?.collection("wishlists").doc(user.uid).get();
       if (requestId !== authRequest || window.valCareAuth.currentUser?.uid !== user.uid) return;
-      const savedItems = wishlist?.exists ? wishlist.data().items || [] : [];
+      let savedItems = wishlist?.exists ? wishlist.data().items || [] : [];
+      if (!savedItems.length) {
+        try {
+          const cachedItems = JSON.parse(window.localStorage.getItem(`valcare-wishlist-${user.uid}`) || "[]");
+          if (Array.isArray(cachedItems)) savedItems = cachedItems;
+        } catch {
+          savedItems = [];
+        }
+      }
       setWishlistItems(savedItems);
       setFavoriteIds(savedItems.map((item) => String(item.id)));
+      try {
+        const savedCart = JSON.parse(window.localStorage.getItem(`valcare-cart-${user.uid}`) || "[]");
+        if (Array.isArray(savedCart)) {
+          setCartItems(savedCart);
+          setCart(savedCart.length);
+        }
+      } catch {
+        setCartItems([]);
+        setCart(0);
+      }
+      cartHydrated.current = true;
       const reference = new URLSearchParams(window.location.search).get("reference");
       if (reference && window.valCarePaymentApiUrl) {
         try {
@@ -138,6 +161,11 @@ function App() {
       }
     });
   }, []);
+
+  useEffect(() => {
+    if (!cartOwnerUid.current || !cartHydrated.current) return;
+    window.localStorage.setItem(`valcare-cart-${cartOwnerUid.current}`, JSON.stringify(cartItems));
+  }, [cartItems]);
 
   useEffect(() => {
     if (!window.valCareDb) return undefined;
@@ -206,11 +234,13 @@ function App() {
       : [...previousItems, { id: product.id, name: product.name, category: product.category, price: Number(product.price), icon: product.icon || "✨", tone: product.tone || "tone-rose" }];
     setWishlistItems(nextItems);
     setFavoriteIds(nextItems.map((item) => String(item.id)));
+    window.localStorage.setItem(`valcare-wishlist-${user.uid}`, JSON.stringify(nextItems));
     try {
       await window.valCareDb.collection("wishlists").doc(user.uid).set({ userId: user.uid, email: user.email || "", items: nextItems, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
     } catch {
       setWishlistItems(previousItems);
       setFavoriteIds(previousItems.map((item) => String(item.id)));
+      window.localStorage.setItem(`valcare-wishlist-${user.uid}`, JSON.stringify(previousItems));
       setAccountMessage("We could not save your favorites. Please try again.");
     }
   };
