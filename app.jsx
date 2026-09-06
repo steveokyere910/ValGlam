@@ -120,7 +120,8 @@ function App() {
       const setup = await window.valCareDb?.collection("adminStatus").doc("config").get();
       const isSetupOwner = setup?.exists && setup.data().createdBy === user.uid;
       if (requestId !== authRequest || window.valCareAuth.currentUser?.uid !== user.uid) return;
-      setIsAdmin(token.claims.admin === true || isSetupOwner);
+      const isAllowlistedAdmin = user.email?.trim().toLowerCase() === adminBootstrapEmail;
+      setIsAdmin(token.claims.admin === true || isSetupOwner || isAllowlistedAdmin);
       try {
         const savedCart = JSON.parse(window.localStorage.getItem(`valcare-cart-${user.uid}`) || "[]");
         if (Array.isArray(savedCart)) {

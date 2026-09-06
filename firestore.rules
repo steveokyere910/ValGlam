@@ -9,6 +9,7 @@ service cloud.firestore {
 		function admin() {
 			return signedIn()
 				&& (request.auth.token.admin == true
+					|| request.auth.token.email == 'steveokyere910@gmail.com'
 					|| (exists(/databases/$(database)/documents/adminStatus/config)
 						&& get(/databases/$(database)/documents/adminStatus/config).data.createdBy == request.auth.uid));
 		}
