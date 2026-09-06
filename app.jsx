@@ -53,6 +53,8 @@ function App() {
   const [query, setQuery] = useState("");
   const [cart, setCart] = useState(0);
   const [cartItems, setCartItems] = useState([]);
+  const [favoriteIds, setFavoriteIds] = useState([]);
+  const [wishlistItems, setWishlistItems] = useState([]);
   const [activePanel, setActivePanel] = useState(null);
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [orderMessage, setOrderMessage] = useState("");
@@ -106,6 +108,10 @@ function App() {
       const setup = await window.valCareDb?.collection("adminStatus").doc("config").get();
       const isSetupOwner = setup?.exists && setup.data().createdBy === user.uid;
       setIsAdmin(token.claims.admin === true || isSetupOwner);
+      const wishlist = await window.valCareDb?.collection("wishlists").doc(user.uid).get();
+      const savedItems = wishlist?.exists ? wishlist.data().items || [] : [];
+      setWishlistItems(savedItems);
+      setFavoriteIds(savedItems.map((item) => String(item.id)));
       const reference = new URLSearchParams(window.location.search).get("reference");
       if (reference && window.valCarePaymentApiUrl) {
         try {
@@ -174,6 +180,41 @@ function App() {
     setCartItems((current) => [...current, product]);
     setActivePanel("cart");
     window.trackValCareEvent?.("add_to_cart", { item_name: product.name, value: product.price * currencies[currency].rate, currency });
+  };
+
+  const toggleFavorite = async (product) => {
+    const user = window.valCareAuth?.currentUser;
+    if (!user || !window.valCareDb) {
+      setAuthMode("login");
+      setAccountMessage("Sign in to save favorite products.");
+      setActivePanel("auth");
+      return;
+    }
+    const previousItems = wishlistItems;
+    const nextItems = favoriteIds.includes(String(product.id))
+      ? previousItems.filter((item) => String(item.id) !== String(product.id))
+      : [...previousItems, { id: product.id, name: product.name, category: product.category, price: Number(product.price), icon: product.icon || "✨", tone: product.tone || "tone-rose" }];
+    setWishlistItems(nextItems);
+    setFavoriteIds(nextItems.map((item) => String(item.id)));
+    try {
+      await window.valCareDb.collection("wishlists").doc(user.uid).set({ userId: user.uid, email: user.email || "", items: nextItems, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    } catch {
+      setWishlistItems(previousItems);
+      setFavoriteIds(previousItems.map((item) => String(item.id)));
+      setAccountMessage("We could not save your favorites. Please try again.");
+    }
+  };
+
+  const deleteProduct = async (product) => {
+    if (!isAdmin || !window.valCareDb || !window.confirm(`Delete ${product.name}?`)) return;
+    try {
+      await window.valCareDb.collection("products").doc(String(product.id)).delete();
+      setProducts((current) => current.filter((item) => String(item.id) !== String(product.id)));
+      if (String(productForm.id) === String(product.id)) resetProductForm();
+      setProductMessage("Product deleted.");
+    } catch {
+      setProductMessage("Could not delete this product. Check your admin access and try again.");
+    }
   };
 
   const removeFromBag = (index) => {
@@ -515,6 +556,7 @@ function App() {
           <button className="icon-button panel-trigger" aria-label="View notifications" onClick={() => setActivePanel("notifications")}><BellIcon /><span className="notification-dot" /></button>
           <button className="icon-button" aria-label="Open settings" onClick={() => setActivePanel("settings")}><SettingsIcon /></button>
           {isAdmin && <button className="icon-button admin-inventory-icon" aria-label="Manage products and stock" onClick={() => { resetProductForm(); setActivePanel("inventory"); }}>✦</button>}
+          {userName && <button className="icon-button" aria-label="Open favorite products" onClick={() => setActivePanel("wishlist")}>♡<span className="cart-count">{wishlistItems.length}</span></button>}
           <button className="icon-button" aria-label={`${cart} items in bag`} onClick={() => setActivePanel("cart")}><BagIcon /><span className="cart-count">{cart}</span></button>
         </div>
       </header>
@@ -539,7 +581,7 @@ function App() {
           <div className="product-grid">
             {filteredProducts.map((product) => (
               <article className="product-card" key={product.id}>
-                <div className={`product-image ${product.tone}`}>{product.imageUrl ? <img src={product.imageUrl} alt="" /> : <span>{product.icon}</span>}{product.tag && <span className="badge">{product.tag}</span>}</div>
+                <div className={`product-image ${product.tone}`}>{product.imageUrl ? <img src={product.imageUrl} alt="" /> : <span>{product.icon}</span>}{product.tag && <span className="badge">{product.tag}</span>}{userName && <button className={`favorite-button ${favoriteIds.includes(String(product.id)) ? "active" : ""}`} type="button" onClick={() => toggleFavorite(product)} aria-label={favoriteIds.includes(String(product.id)) ? `Remove ${product.name} from favorites` : `Save ${product.name} to favorites`}>{favoriteIds.includes(String(product.id)) ? "♥" : "♡"}</button>}</div>
                 <div className="product-info"><h3>{product.name}</h3><div className="product-bottom"><span className="price">{formatPrice(product.price)}</span><span className={`stock-label ${product.stock === 0 ? "out-of-stock" : ""}`}>{product.stock === 0 ? "Sold out" : `${product.stock} left`}</span><button className="review-button" onClick={() => openReviews(product)}>Reviews</button><button className="add-button" onClick={() => addToBag(product)} disabled={product.stock === 0}>+ Add to bag</button></div></div>
               </article>
             ))}
@@ -580,6 +622,7 @@ function App() {
         <aside className={`account-panel theme-${theme}`} onClick={(event) => event.stopPropagation()}>
           <div className="panel-header"><div><p className="eyebrow">ValCare account</p><h2>{activePanel === "cart" ? text.cart : activePanel === "notifications" ? text.notifications : activePanel === "transactions" ? text.transactions : activePanel === "reviews" ? "Product reviews" : activePanel === "inventory" ? "Manage products" : activePanel === "create-account" || (activePanel === "auth" && authMode === "create") ? "Create your account" : activePanel === "auth" ? "Log in" : text.settings}</h2></div><button className="close-button" onClick={closePanel} aria-label="Close panel">×</button></div>
           {(activePanel === "create-account" || activePanel === "auth") && <div className="panel-content account-form"><p className="account-intro">{authMode === "create" ? "Create your account to collect your ValCare finds." : "Log in to continue shopping and manage your account."}</p><div className="social-auth-grid"><button className="social-auth-button google-auth-button" type="button" onClick={() => signInWithProvider("Google")}><ProviderLogo name="Google" />Continue with Google</button></div><div className="form-divider"><span>or use email</span></div><form onSubmit={authMode === "create" ? createAccount : login}>{authMode === "create" && <input type="text" placeholder="Your name" value={account.name} onChange={(event) => setAccount({ ...account, name: event.target.value })} required />}<input type="email" placeholder="Email address" value={account.email} onChange={(event) => setAccount({ ...account, email: event.target.value })} required /><input type="password" placeholder="Password" value={account.password} onChange={(event) => setAccount({ ...account, password: event.target.value })} minLength="6" required />{authMode === "create" && <input type="password" placeholder="Confirm password" value={account.confirm} onChange={(event) => setAccount({ ...account, confirm: event.target.value })} minLength="6" required />}<button className="settings-save" type="submit">{authMode === "create" ? "Create account" : "Log in"}</button>{accountMessage && <small className="password-message">{accountMessage}</small>}</form><button className="auth-switch" type="button" onClick={() => { setAuthMode(authMode === "create" ? "login" : "create"); setAdminMode(false); setAccountMessage(""); }}>{authMode === "create" ? "Already have an account? Log in" : "New to ValCare? Create an account"}</button></div>}
+          {activePanel === "wishlist" && <div className="panel-content"><div className="wishlist-list">{wishlistItems.length ? wishlistItems.map((product) => <article className="wishlist-item" key={product.id}><span className={`cart-thumb ${product.tone}`}>{product.icon}</span><div><strong>{product.name}</strong><span>{formatPrice(product.price)}</span></div><button className="add-button" type="button" onClick={() => addToBag(product)}>Add to bag</button><button className="remove-item" type="button" onClick={() => toggleFavorite(product)} aria-label={`Remove ${product.name} from favorites`}>×</button></article>) : <div className="panel-empty"><p>Your favorite products will appear here.</p></div>}</div></div>}
           {activePanel === "cart" && <div className="panel-content">
             {orderPlaced && <div className="success-message">Order received. We’ll be in touch shortly.</div>}
             {!cartItems.length && !orderPlaced && <div className="panel-empty"><BagIcon /><p>Your cart is waiting for something lovely.</p><a href="#shop" onClick={closePanel}>Continue shopping</a></div>}
@@ -602,6 +645,7 @@ function App() {
           </div>}
           {activePanel === "inventory" && isAdmin && <div className="panel-content inventory-panel"><p className="account-intro">Update prices, add new items, and keep stock levels current.</p><form className="product-admin-form" onSubmit={saveProduct}><input placeholder="Product name" value={productForm.name} onChange={(event) => setProductForm({ ...productForm, name: event.target.value })} required /><div className="admin-form-row"><select value={productForm.category} onChange={(event) => setProductForm({ ...productForm, category: event.target.value })}><option>Beauty</option><option>Accessories</option><option>Home</option><option>Lifestyle</option></select><input type="number" min="0" step="0.01" placeholder="Price" value={productForm.price} onChange={(event) => setProductForm({ ...productForm, price: event.target.value })} required /><input type="number" min="0" step="1" placeholder="Stock" value={productForm.stock} onChange={(event) => setProductForm({ ...productForm, stock: event.target.value })} required /></div><div className="admin-form-row"><input placeholder="Icon emoji" value={productForm.icon} onChange={(event) => setProductForm({ ...productForm, icon: event.target.value })} /><select value={productForm.tone} onChange={(event) => setProductForm({ ...productForm, tone: event.target.value })}><option value="tone-rose">Rose</option><option value="tone-sage">Sage</option><option value="tone-yellow">Yellow</option><option value="tone-lilac">Lilac</option><option value="tone-blue">Blue</option><option value="tone-peach">Peach</option><option value="tone-pink">Pink</option><option value="tone-green">Green</option></select><input placeholder="Tag (optional)" value={productForm.tag} onChange={(event) => setProductForm({ ...productForm, tag: event.target.value })} /></div><div className="admin-form-actions"><button className="settings-save" type="submit" disabled={isSavingProduct}>{isSavingProduct ? "Saving..." : productForm.id ? "Update product" : "Add product"}</button>{productForm.id && <button className="settings-link" type="button" onClick={resetProductForm}>Cancel edit</button>}</div>{productMessage && <small className="password-message">{productMessage}</small>}</form><div className="inventory-list">{products.map((product) => <button className="inventory-item" key={product.id} type="button" onClick={() => editProduct(product)}><span className={`cart-thumb ${product.tone}`}>{product.icon}</span><span><strong>{product.name}</strong><small>{formatPrice(product.price)} · {product.stock} in stock</small></span><em>Edit</em></button>)}</div></div>}
           {activePanel === "inventory" && isAdmin && <div className="product-image-url-field"><label htmlFor="product-image-file">Product picture</label><input id="product-image-file" type="file" accept="image/*" capture="environment" onChange={uploadProductImage} disabled={isUploadingImage} /><small>{isUploadingImage ? "Uploading image..." : productForm.id ? "Choose a replacement picture from your phone or camera." : "Choose a picture from your phone or camera."}</small><label htmlFor="product-image-url">Image URL</label><input id="product-image-url" type="url" placeholder="https://..." value={productForm.imageUrl} onChange={(event) => setProductForm({ ...productForm, imageUrl: event.target.value })} /></div>}
+        {activePanel === "inventory" && isAdmin && productForm.id && <button className="settings-link" type="button" onClick={() => deleteProduct(products.find((product) => String(product.id) === String(productForm.id)))}>Delete selected product</button>}
         </aside>
       </div>}
     </>
