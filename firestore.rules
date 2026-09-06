@@ -1,0 +1,107 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function admin() {
+      return signedIn()
+        && (request.auth.token.admin == true
+          || (exists(/databases/$(database)/documents/adminStatus/config)
+            && get(/databases/$(database)/documents/adminStatus/config).data.createdBy == request.auth.uid));
+    }
+
+    match /orders/{orderId} {
+      allow create: if false;
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /staff/{staffId} {
+      allow read, write: if admin();
+    }
+
+    match /products/{productId} {
+      allow read: if true;
+      allow create, update: if admin()
+        && request.resource.data.keys().hasOnly(['id', 'name', 'category', 'price', 'stock', 'icon', 'tone', 'tag', 'imageUrl', 'updatedAt'])
+        && request.resource.data.id == productId
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.category in ['Beauty', 'Accessories', 'Home', 'Lifestyle']
+        && request.resource.data.price is number
+        && request.resource.data.price >= 0
+        && request.resource.data.stock is number
+        && request.resource.data.stock >= 0
+        && request.resource.data.stock % 1 == 0
+        && request.resource.data.icon is string
+        && request.resource.data.tone is string
+        && request.resource.data.tag is string
+        && request.resource.data.imageUrl is string
+        && request.resource.data.imageUrl.size() <= 2000
+        && (request.resource.data.imageUrl == '' || request.resource.data.imageUrl.matches('^https://.*'))
+        && request.resource.data.updatedAt is timestamp;
+      allow delete: if admin();
+    }
+
+    match /subscribers/{subscriberId} {
+      allow create, update: if subscriberId == request.resource.data.email
+        && request.resource.data.email is string
+        && request.resource.data.email.size() <= 254
+        && request.resource.data.email.matches('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$')
+        && request.resource.data.keys().hasOnly(['email', 'subscribedAt', 'source'])
+        && request.resource.data.source == 'website'
+        && request.resource.data.subscribedAt is timestamp;
+      allow read, delete: if false;
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'productId', 'productName', 'userId', 'userName',
+          'rating', 'comment', 'createdAt'
+        ])
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.productId is number
+        && request.resource.data.productName is string
+        && request.resource.data.userName is string
+        && request.resource.data.rating is number
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5
+        && request.resource.data.comment is string
+        && request.resource.data.comment.size() > 0
+        && request.resource.data.comment.size() <= 500
+        && request.resource.data.createdAt is timestamp;
+      allow update, delete: if signedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    match /adminRequests/{requestId} {
+      allow create: if signedIn()
+        && request.auth.token.email == 'steveokyere910@gmail.com'
+        && requestId == request.auth.uid
+        && !exists(/databases/$(database)/documents/adminStatus/config)
+        && getAfter(/databases/$(database)/documents/adminStatus/config).data.createdBy == request.auth.uid
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.keys().hasOnly(['uid', 'email', 'name', 'status', 'createdAt']);
+      allow read, update, delete: if admin();
+    }
+
+    match /adminStatus/{statusId} {
+      allow read: if true;
+      allow create: if signedIn()
+        && statusId == 'config'
+        && request.auth.token.email == 'steveokyere910@gmail.com'
+        && !exists(/databases/$(database)/documents/adminStatus/config)
+        && getAfter(/databases/$(database)/documents/adminRequests/$(request.auth.uid)).data.uid == request.auth.uid
+        && request.resource.data.setupComplete == true
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.keys().hasOnly(['setupComplete', 'createdBy', 'createdAt']);
+      allow update, delete: if false;
+    }
+  }
+}
