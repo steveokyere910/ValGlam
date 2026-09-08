@@ -931,9 +931,14 @@ function App() {
         Google: () => new firebase.auth.GoogleAuthProvider()
       };
       const provider = providers[providerName]();
-      await window.valCareAuth.signInWithPopup(provider);
+      const result = await window.valCareAuth.signInWithPopup(provider);
       setAccountMessage("");
-      window.setTimeout(() => setActivePanel(null), 500);
+      setActivePanel(null);
+      setIsAccountLoading(false);
+      if (result.additionalUserInfo?.isNewUser) {
+        setWelcomeStep(0);
+        setShowWelcomeAnimation(true);
+      }
     } catch (error) {
       const messages = {
         "auth/popup-closed-by-user": `${providerName} sign-in was cancelled.`,
