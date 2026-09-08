@@ -182,6 +182,19 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const user = window.valCareAuth?.currentUser;
+    if (!userName || !user || !window.valCareMessaging || !("Notification" in window) || Notification.permission !== "granted") return undefined;
+    let cancelled = false;
+    setPushStatus("loading");
+    registerPushToken(user).then((registered) => {
+      if (!cancelled) setPushStatus(registered ? "enabled" : "idle");
+    }).catch(() => {
+      if (!cancelled) setPushStatus("idle");
+    });
+    return () => { cancelled = true; };
+  }, [userName]);
+
+  useEffect(() => {
     const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
     const iosDevice = /iphone|ipad|ipod/i.test(window.navigator.userAgent) || (window.navigator.platform === "MacIntel" && window.navigator.maxTouchPoints > 1);
     setIsStandalone(standalone);
@@ -941,6 +954,20 @@ function App() {
     oscillator.stop(context.currentTime + 0.3);
   };
 
+  const registerPushToken = async (user) => {
+    if (!window.valCareMessaging || !("serviceWorker" in navigator) || !window.valCareDb) return false;
+    const registration = await navigator.serviceWorker.ready;
+    const token = await window.valCareMessaging.getToken({ serviceWorkerRegistration: registration });
+    if (!token) return false;
+    await window.valCareDb.collection("pushTokens").doc(token).set({
+      token,
+      userId: user.uid,
+      email: user.email || "",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    return true;
+  };
+
   const enablePushNotifications = async () => {
     const user = window.valCareAuth?.currentUser;
     if (!user) {
@@ -960,15 +987,7 @@ function App() {
         setPushStatus(permission === "denied" ? "denied" : "idle");
         return;
       }
-      const registration = await navigator.serviceWorker.ready;
-      const token = await window.valCareMessaging.getToken({ serviceWorkerRegistration: registration });
-      if (!token || !window.valCareDb) throw new Error("Push registration unavailable.");
-      await window.valCareDb.collection("pushTokens").doc(token).set({
-        token,
-        userId: user.uid,
-        email: user.email || "",
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
+      if (!await registerPushToken(user)) throw new Error("Push registration unavailable.");
       setPushStatus("enabled");
       playNotificationSound();
     } catch (error) {
