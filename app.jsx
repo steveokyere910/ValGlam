@@ -65,6 +65,7 @@ function App() {
   const [siteReady, setSiteReady] = useState(false);
   const cartOwnerUid = useRef(null);
   const cartHydrated = useRef(false);
+  const handledPushNotificationIds = useRef(new Set());
   const [cartMessage, setCartMessage] = useState("");
   const [favoriteIds, setFavoriteIds] = useState([]);
   const [wishlistItems, setWishlistItems] = useState([]);
@@ -174,6 +175,7 @@ function App() {
     return window.valCareMessaging.onMessage((payload) => {
       const title = payload.notification?.title || "Val's Glam update";
       const body = payload.notification?.body || "You have a new Val's Glam notification.";
+      if (payload.data?.notificationId) handledPushNotificationIds.current.add(payload.data.notificationId);
       playNotificationSound();
       if (document.visibilityState === "visible" && "Notification" in window && Notification.permission === "granted") {
         new Notification(title, { body, icon: "icon-192.png", tag: payload.data?.notificationId || "valcare-notification" });
@@ -335,6 +337,26 @@ function App() {
       }
       let broadcastNotifications = [];
       let personalNotifications = [];
+      const initialSources = new Set();
+      let notificationsReady = false;
+      const receiveNotifications = (source, nextNotifications) => {
+        const newNotifications = notificationsReady
+          ? nextNotifications.filter((notification) => !handledPushNotificationIds.current.has(notification.id))
+          : [];
+        nextNotifications.forEach((notification) => handledPushNotificationIds.current.add(notification.id));
+        initialSources.add(source);
+        if (initialSources.size === 2) notificationsReady = true;
+        if (newNotifications.length && document.visibilityState === "visible") {
+          newNotifications.forEach((notification) => {
+            const title = notification.title || "Val's Glam update";
+            const body = notification.message || "You have a new Val's Glam notification.";
+            playNotificationSound();
+            if ("Notification" in window && Notification.permission === "granted") {
+              new Notification(title, { body, icon: "icon-192.png", tag: notification.id });
+            }
+          });
+        }
+      };
       const updateNotifications = () => {
         const merged = [...broadcastNotifications, ...personalNotifications];
         merged.sort((left, right) => (right.createdAt?.toMillis?.() || 0) - (left.createdAt?.toMillis?.() || 0));
@@ -342,6 +364,7 @@ function App() {
       };
       unsubscribeBroadcastNotifications = window.valCareDb.collection("notifications").where("audience", "==", "all").limit(20).onSnapshot((snapshot) => {
         broadcastNotifications = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+        receiveNotifications("broadcast", broadcastNotifications);
         updateNotifications();
       }, () => {
         broadcastNotifications = [];
@@ -349,6 +372,7 @@ function App() {
       });
       unsubscribePersonalNotifications = window.valCareDb.collection("notifications").where("audience", "==", "user").where("recipientId", "==", user.uid).limit(20).onSnapshot((snapshot) => {
         personalNotifications = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+        receiveNotifications("personal", personalNotifications);
         updateNotifications();
       }, () => {
         personalNotifications = [];
@@ -927,6 +951,12 @@ function App() {
     }, 240);
   };
 
+  const openNewProductForm = () => {
+    resetProductForm();
+    openPanelWithLoading("inventory");
+    window.setTimeout(() => document.querySelector(".product-admin-form")?.scrollIntoView({ behavior: "smooth", block: "start" }), 280);
+  };
+
   const changeLanguage = (nextLanguage) => {
     if (nextLanguage === language || isLanguageLoading) return;
     setIsLanguageLoading(true);
@@ -1055,7 +1085,6 @@ function App() {
       {isLanguageLoading && <div className="language-loading" role="status" aria-live="polite"><LoadingSpinner label="Loading language" /></div>}
       <div className="announcement">{text.announcement}</div>
       {cartMessage && <div className="cart-toast" role="status" aria-live="polite">{cartMessage}</div>}
-      {userName && pushStatus !== "enabled" && <button className="push-enable-button" type="button" onClick={enablePushNotifications} disabled={pushStatus === "loading"}>{pushStatus === "loading" ? "Enabling alerts..." : pushStatus === "denied" ? "Allow alerts in browser settings" : "Enable alerts"}</button>}
       <header className="navbar">
         <a className="logo" href="#top" aria-label="Val's Glam Accessories home"><img className="brand-logo" src="vals.jpg" alt="Val's Glam Accessories" /><span className="logo-name">Val's Glam Accessories</span></a>
         <nav className="nav-links" aria-label="Main navigation">
@@ -1065,10 +1094,11 @@ function App() {
           {userName ? <button className={`user-name ${isAdmin ? "admin-user-name" : ""}`} onClick={() => openPanelWithLoading(isAdmin ? "inventory" : "settings")} aria-label={isAdmin ? "Open admin dashboard" : "Open account settings"} title={userName}>{loadingAction === (isAdmin ? "inventory" : "settings") ? <LoadingSpinner label="Opening" /> : <><span className="user-avatar">{userName.charAt(0).toUpperCase()}</span><span className="user-display-name">{userName}</span></>}</button> : <button className="login-link" onClick={() => { setAuthMode("login"); setAccountMessage(""); openPanelWithLoading("auth"); }}>{loadingAction === "auth" ? <LoadingSpinner label="Opening" /> : "Log in"}</button>}
           {!isAdmin && <button className="icon-button panel-trigger" aria-label={`View notifications${unreadNotificationCount ? `, ${unreadNotificationCount} unread` : ""}`} title="Notifications" onClick={() => { openNotifications(); setLoadingAction("notifications"); window.setTimeout(() => setLoadingAction(null), 260); }}>{loadingAction === "notifications" ? <LoadingSpinner label="" /> : <><BellIcon />{unreadNotificationCount > 0 && <span className="cart-count notification-count">{unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}</span>}</>}</button>}
           {!isAdmin && userName && <button className="icon-button" aria-label="Open favorite products" title="Wishlist" onClick={() => openPanelWithLoading("wishlist")}>{loadingAction === "wishlist" ? <LoadingSpinner label="" /> : <>♡<span className="cart-count">{wishlistItems.length}</span></>}</button>}
+          {userName && pushStatus !== "enabled" && <button className="push-enable-button" type="button" onClick={enablePushNotifications} disabled={pushStatus === "loading"}>{pushStatus === "loading" ? "Enabling alerts..." : pushStatus === "denied" ? "Allow alerts" : "Enable alerts"}</button>}
           {!isStandalone && <button className="install-app-button" type="button" onClick={installApp}>Install App</button>}
           <button className="icon-button settings-button" aria-label="Open settings" title="Settings" onClick={() => openPanelWithLoading("settings")}>{loadingAction === "settings" ? <LoadingSpinner label="" /> : <SettingsIcon />}</button>
           <div className="secondary-nav-actions">
-            {isAdmin && <button className="icon-button admin-inventory-icon" aria-label="Manage products and stock" title="Manage products" onClick={() => { resetProductForm(); openPanelWithLoading("inventory"); }}>{loadingAction === "inventory" ? <LoadingSpinner label="" /> : "✦"}</button>}
+            {isAdmin && <button className="icon-button admin-inventory-icon" aria-label="Manage products and stock" title="Manage products" onClick={openNewProductForm}>{loadingAction === "inventory" ? <LoadingSpinner label="" /> : "✦"}</button>}
             {isAdmin && <button className="icon-button" aria-label="Open sales report" title="Sales report" onClick={() => handleLoadingAction("report", openAdminReport)}>{loadingAction === "report" ? <LoadingSpinner label="" /> : "▥"}</button>}
           </div>
           {!isAdmin && <button className="icon-button" aria-label={`${cart} items in bag`} title="Shopping bag" onClick={() => openPanelWithLoading("cart")}>{loadingAction === "cart" ? <LoadingSpinner label="" /> : <><BagIcon /><span className="cart-count">{cart}</span></>}</button>}
@@ -1101,7 +1131,7 @@ function App() {
             ))}
             {!filteredProducts.length && <p className="empty">Nothing found just yet. Try another little search.</p>}
           </div>
-          {isAdmin && <div className="admin-add-product-row"><button className="primary-button admin-add-product-button" type="button" onClick={() => { resetProductForm(); setActivePanel("inventory"); }}>+ Add new product</button></div>}
+          {isAdmin && <div className="admin-add-product-row"><button className="primary-button admin-add-product-button" type="button" onClick={openNewProductForm}>+ Add new product</button></div>}
         </section>
 
         <section className="value-strip" id="about">
