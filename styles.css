@@ -77,6 +77,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-user-name .user-identity small { color: #8d650d; }
 .admin-user-name:hover { border-color: #b47b08; }
 .login-link { background: var(--ink); border: 0; color: white; font-size: 11px; font-weight: 700; letter-spacing: .06em; min-width: 86px; padding: 10px 13px; text-transform: uppercase; }
+.install-app-button { background: var(--coral); border: 0; color: white; font-size: 10px; font-weight: 700; letter-spacing: .06em; padding: 10px 12px; text-transform: uppercase; white-space: nowrap; }
+.install-app-button:hover { background: var(--ink); }
 .icon-button { align-items: center; background: none; border: 0; color: var(--ink); display: inline-flex; gap: 7px; justify-content: center; min-width: 40px; padding: 7px; }
 .icon-button svg { height: 19px; width: 19px; }
 .loading-inline { align-items: center; display: inline-flex; font-size: 10px; font-weight: 700; gap: 8px; letter-spacing: .08em; text-transform: uppercase; }
@@ -273,6 +275,14 @@ footer { background: #d8b34a; border-top: 0; color: #392719; font-size: 11px; pa
 .confirm-cancel:hover { background: var(--cream); }
 .confirm-submit { background: var(--coral); border-color: var(--coral); color: white; }
 .confirm-submit:hover { background: var(--ink); border-color: var(--ink); }
+.install-help-backdrop { align-items: center; background: rgba(36, 21, 44, .48); display: flex; inset: 0; justify-content: center; overflow-y: auto; padding: 20px; position: fixed; z-index: 50; }
+.install-help { background: var(--paper); box-shadow: 0 24px 70px rgba(36, 21, 44, .25); max-height: calc(100dvh - 40px); max-width: 410px; overflow-y: auto; padding: 30px; position: relative; width: 100%; }
+.install-help .close-button { position: absolute; right: 25px; top: 22px; }
+.install-help h2 { color: var(--ink); font-family: "Playfair Display", serif; font-size: 30px; font-weight: 500; margin: 0 0 18px; }
+.install-help p, .install-help li { color: var(--muted); font-size: 13px; line-height: 1.6; }
+.install-help ol { display: grid; gap: 10px; margin: 0 0 24px; padding-left: 22px; }
+.install-help strong { color: var(--ink); }
+.install-help .settings-save { width: 100%; }
 .cart-item { align-items: center; border-bottom: 1px solid var(--line); display: grid; gap: 12px; grid-template-columns: 54px 1fr auto; padding: 13px 0; }
 .theme-dark .cart-item { border-color: #516257; }
 .cart-thumb { align-items: center; display: flex; font-size: 25px; height: 54px; justify-content: center; }
@@ -369,7 +379,7 @@ footer { background: #d8b34a; border-top: 0; color: #392719; font-size: 11px; pa
 }
 
 @media (max-width: 760px) {
-  .navbar { padding: 17px 20px; } .nav-links { display: none; } .nav-actions { gap: 5px; } .secondary-nav-actions { display: none; } .secondary-nav-actions.open { align-items: center; background: var(--paper); border: 1px solid var(--line); box-shadow: var(--shadow); display: grid; gap: 4px; grid-template-columns: repeat(3, 36px); padding: 6px; position: absolute; right: 0; top: calc(100% + 8px); z-index: 2; } .user-name { max-width: 115px; } .icon-button { align-items: center; flex: 0 0 36px; height: 36px; justify-content: center; padding: 8px; } .icon-button svg { height: 20px; width: 20px; } .hero { grid-template-columns: 1fr; } .hero-copy { padding: 67px 25px 55px; } .hero-art { min-height: 340px; padding: 20px; } .hero-photo { border-width: 6px; border-radius: 22px; height: 300px; width: min(100%, 360px); } .hero-art::before { height: 300px; width: 300px; } .bottle { height: 190px; transform: scale(.78) rotate(7deg); width: 130px; }
+  .navbar { padding: 17px 20px; } .nav-links { display: none; } .nav-actions { gap: 5px; } .secondary-nav-actions { display: none; } .secondary-nav-actions.open { align-items: center; background: var(--paper); border: 1px solid var(--line); box-shadow: var(--shadow); display: grid; gap: 4px; grid-template-columns: repeat(3, 36px); padding: 6px; position: absolute; right: 0; top: calc(100% + 8px); z-index: 2; } .user-name { max-width: 115px; } .install-app-button { font-size: 9px; padding: 9px 8px; } .icon-button { align-items: center; flex: 0 0 36px; height: 36px; justify-content: center; padding: 8px; } .icon-button svg { height: 20px; width: 20px; } .hero { grid-template-columns: 1fr; } .hero-copy { padding: 67px 25px 55px; } .hero-art { min-height: 340px; padding: 20px; } .hero-photo { border-width: 6px; border-radius: 22px; height: 300px; width: min(100%, 360px); } .hero-art::before { height: 300px; width: 300px; } .bottle { height: 190px; transform: scale(.78) rotate(7deg); width: 130px; }
   .admin-nav-actions .secondary-nav-actions { display: flex; gap: 2px; }
   .section { padding: 64px 20px; } .section-heading { align-items: baseline; } .section h2 { font-size: 33px; } .view-all { font-size: 10px; } .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 23px 12px; } .product-image { height: 170px; } .product-image > span:not(.badge) { font-size: 51px; } .product-info h3 { font-size: 16px; } .product-bottom { align-items: flex-start; flex-direction: column; gap: 6px; } .add-button, .review-button { width: 100%; } .value-strip { grid-template-columns: 1fr; } .value-item { border-bottom: 1px solid #e0d7ca; border-right: 0; }
   .locations-section { padding: 58px 20px 24px; } .location-grid { grid-template-columns: 1fr; }

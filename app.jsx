@@ -86,6 +86,10 @@ function App() {
   const [currency, setCurrency] = useState("GHS");
   const [language, setLanguage] = useState(() => ["en", "tw", "fr"].includes(window.localStorage.getItem("valcare-language")) ? window.localStorage.getItem("valcare-language") : "en");
   const [isLanguageLoading, setIsLanguageLoading] = useState(false);
+  const [installPromptEvent, setInstallPromptEvent] = useState(null);
+  const [installHelpOpen, setInstallHelpOpen] = useState(false);
+  const [isIos, setIsIos] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
   const [theme, setTheme] = useState(() => ["light", "dark", "system"].includes(window.localStorage.getItem("valcare-theme")) ? window.localStorage.getItem("valcare-theme") : "light");
   const [cosmeticMotion, setCosmeticMotion] = useState(65);
   const [password, setPassword] = useState({ current: "", next: "", confirm: "" });
@@ -162,6 +166,28 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem("valcare-language", language);
   }, [language]);
+
+  useEffect(() => {
+    const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+    const iosDevice = /iphone|ipad|ipod/i.test(window.navigator.userAgent) || (window.navigator.platform === "MacIntel" && window.navigator.maxTouchPoints > 1);
+    setIsStandalone(standalone);
+    setIsIos(iosDevice);
+    const handleInstallPrompt = (event) => {
+      event.preventDefault();
+      setInstallPromptEvent(event);
+    };
+    const handleInstalled = () => {
+      setInstallPromptEvent(null);
+      setIsStandalone(true);
+      setInstallHelpOpen(false);
+    };
+    window.addEventListener("beforeinstallprompt", handleInstallPrompt);
+    window.addEventListener("appinstalled", handleInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleInstallPrompt);
+      window.removeEventListener("appinstalled", handleInstalled);
+    };
+  }, []);
 
   useEffect(() => {
     window.localStorage.setItem("valcare-theme", theme);
@@ -883,6 +909,16 @@ function App() {
     }, 420);
   };
 
+  const installApp = async () => {
+    if (isIos || !installPromptEvent) {
+      setInstallHelpOpen(true);
+      return;
+    }
+    installPromptEvent.prompt();
+    await installPromptEvent.userChoice;
+    setInstallPromptEvent(null);
+  };
+
   const confirmLogout = () => {
     setConfirmDialog({
       title: "Log out?",
@@ -941,6 +977,7 @@ function App() {
           {userName ? <button className={`user-name ${isAdmin ? "admin-user-name" : ""}`} onClick={() => openPanelWithLoading(isAdmin ? "inventory" : "settings")} aria-label={isAdmin ? "Open admin dashboard" : "Open account settings"} title={userName}>{loadingAction === (isAdmin ? "inventory" : "settings") ? <LoadingSpinner label="Opening" /> : <><span className="user-avatar">{userName.charAt(0).toUpperCase()}</span><span className="user-display-name">{userName}</span></>}</button> : <button className="login-link" onClick={() => { setAuthMode("login"); setAccountMessage(""); openPanelWithLoading("auth"); }}>{loadingAction === "auth" ? <LoadingSpinner label="Opening" /> : "Log in"}</button>}
           {!isAdmin && <button className="icon-button panel-trigger" aria-label={`View notifications${unreadNotificationCount ? `, ${unreadNotificationCount} unread` : ""}`} title="Notifications" onClick={() => { openNotifications(); setLoadingAction("notifications"); window.setTimeout(() => setLoadingAction(null), 260); }}>{loadingAction === "notifications" ? <LoadingSpinner label="" /> : <><BellIcon />{unreadNotificationCount > 0 && <span className="cart-count notification-count">{unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}</span>}</>}</button>}
           {!isAdmin && userName && <button className="icon-button" aria-label="Open favorite products" title="Wishlist" onClick={() => openPanelWithLoading("wishlist")}>{loadingAction === "wishlist" ? <LoadingSpinner label="" /> : <>♡<span className="cart-count">{wishlistItems.length}</span></>}</button>}
+          {!isStandalone && <button className="install-app-button" type="button" onClick={installApp}>Install App</button>}
           <button className="icon-button settings-button" aria-label="Open settings" title="Settings" onClick={() => openPanelWithLoading("settings")}>{loadingAction === "settings" ? <LoadingSpinner label="" /> : <SettingsIcon />}</button>
           <div className="secondary-nav-actions">
             {isAdmin && <button className="icon-button admin-inventory-icon" aria-label="Manage products and stock" title="Manage products" onClick={() => { resetProductForm(); openPanelWithLoading("inventory"); }}>{loadingAction === "inventory" ? <LoadingSpinner label="" /> : "✦"}</button>}
@@ -1008,6 +1045,15 @@ function App() {
         </div>
         <div>© 2026 ValCare · Made for your everyday.</div>
       </footer>
+      {installHelpOpen && ReactDOM.createPortal(<div className="install-help-backdrop" role="presentation" onClick={() => setInstallHelpOpen(false)}>
+        <section className="install-help" role="dialog" aria-modal="true" aria-labelledby="install-help-title" onClick={(event) => event.stopPropagation()}>
+          <button className="close-button" type="button" onClick={() => setInstallHelpOpen(false)} aria-label="Close install instructions">×</button>
+          <p className="eyebrow">ValCare app</p>
+          <h2 id="install-help-title">Install ValCare</h2>
+          {isIos ? <ol><li>Tap the <strong>Share</strong> button in Safari.</li><li>Choose <strong>Add to Home Screen</strong>.</li><li>Tap <strong>Add</strong> to finish.</li></ol> : <p>Open your browser menu and choose <strong>Install ValCare</strong> or <strong>Add to Home screen</strong>. The exact wording depends on your browser.</p>}
+          <button className="settings-save" type="button" onClick={() => setInstallHelpOpen(false)}>Got it</button>
+        </section>
+      </div>, document.body)}
       {activePanel && <div className="panel-backdrop" onClick={closePanel}>
         <aside className={`account-panel theme-${theme}`} onClick={(event) => event.stopPropagation()}>
           <div className="panel-header"><div><p className="eyebrow">ValCare account</p><h2>{activePanel === "cart" ? text.cart : activePanel === "notifications" ? text.notifications : activePanel === "transactions" ? text.transactions : activePanel === "report" ? "Sales report" : activePanel === "reviews" ? "Product reviews" : activePanel === "inventory" ? "Manage products" : activePanel === "create-account" || (activePanel === "auth" && authMode === "create") ? "Create your account" : activePanel === "auth" ? "Log in" : text.settings}</h2></div><button className="close-button" onClick={closePanel} aria-label="Close panel">×</button></div>

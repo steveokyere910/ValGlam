@@ -4,7 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#f6f0e8" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="description" content="ValCare — little luxuries for everyday living." />
+    <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" type="image/jpeg" href="vals.jpg" />
     <link rel="apple-touch-icon" href="vals.jpg" />
     <title>ValCare | Little luxuries, lovely days</title>
@@ -36,5 +40,10 @@
     <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
     <script src="firebase.js"></script>
     <script type="text/babel" src="app.jsx?v=19"></script>
+    <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));
+      }
+    </script>
   </body>
 </html>
