@@ -585,8 +585,13 @@ function App() {
   };
 
   const removeFromBag = (index) => {
+    const removedProduct = cartItems[index];
     setCartItems((current) => current.filter((_, itemIndex) => itemIndex !== index));
     setCart((current) => Math.max(0, current - 1));
+    if (removedProduct) {
+      setCartMessage(`${removedProduct.name} removed from cart.`);
+      window.setTimeout(() => setCartMessage(""), 2200);
+    }
   };
 
   const salesSummary = adminOrders.reduce((summary, order) => {
