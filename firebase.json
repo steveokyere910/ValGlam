@@ -9,6 +9,7 @@
     "rules": "storage.rules"
   },
   "hosting": {
+    "site": "valscarea1",
     "public": ".",
     "ignore": [
       "firebase.json",

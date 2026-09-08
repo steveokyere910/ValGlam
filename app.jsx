@@ -92,12 +92,16 @@ function App() {
   const [currency, setCurrency] = useState("GHS");
   const [language, setLanguage] = useState(() => ["en", "tw", "fr"].includes(window.localStorage.getItem("valcare-language")) ? window.localStorage.getItem("valcare-language") : "en");
   const [isLanguageLoading, setIsLanguageLoading] = useState(false);
-  const [pushStatus, setPushStatus] = useState("idle");
+  const [pushStatus, setPushStatus] = useState(() => "Notification" in window ? "idle" : "unsupported");
   const audioContextRef = useRef(null);
   const [installPromptEvent, setInstallPromptEvent] = useState(null);
   const [installHelpOpen, setInstallHelpOpen] = useState(false);
   const [isIos, setIsIos] = useState(false);
-  const [isStandalone, setIsStandalone] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+    return standalone || window.localStorage.getItem("valcare-installed") === "true";
+  });
   const [theme, setTheme] = useState(() => ["light", "dark", "system"].includes(window.localStorage.getItem("valcare-theme")) ? window.localStorage.getItem("valcare-theme") : "light");
   const [cosmeticMotion, setCosmeticMotion] = useState(65);
   const [password, setPassword] = useState({ current: "", next: "", confirm: "" });
@@ -130,7 +134,7 @@ function App() {
   useEffect(() => {
     const loader = document.querySelector(".initial-loader");
     if (!loader) {
-      setSiteReady(true);
+      const frame = window.requestAnimationFrame(() => setSiteReady(true));
       return undefined;
     }
     const frame = window.requestAnimationFrame(() => {
@@ -146,6 +150,11 @@ function App() {
   useEffect(() => {
     document.documentElement.style.setProperty("--motion-scale", `${cosmeticMotion / 65}`);
   }, [cosmeticMotion]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme === "dark" ? "dark" : "light";
+  }, [theme]);
 
   useEffect(() => {
     if (!siteReady) return undefined;
@@ -190,27 +199,44 @@ function App() {
 
   useEffect(() => {
     const user = window.valCareAuth?.currentUser;
-    if (!userName || !user || !window.valCareMessaging || !("Notification" in window) || Notification.permission !== "granted") return undefined;
+    if (!userName || !user || !window.valCareMessaging || !("Notification" in window) || !("serviceWorker" in navigator)) return undefined;
     let cancelled = false;
-    setPushStatus("loading");
-    registerPushToken(user).then((registered) => {
-      if (!cancelled) setPushStatus(registered ? "enabled" : "idle");
-    }).catch(() => {
-      if (!cancelled) setPushStatus("idle");
-    });
+    const enableForSignedInUser = async () => {
+      setPushStatus("loading");
+      try {
+        let permission = Notification.permission;
+        if (permission === "default") permission = await Notification.requestPermission();
+        if (cancelled) return;
+        if (permission !== "granted") {
+          setPushStatus(permission === "denied" ? "denied" : "idle");
+          return;
+        }
+        const registered = await registerPushToken(user);
+        if (!cancelled) setPushStatus(registered ? "enabled" : "idle");
+      } catch (error) {
+        console.warn("Push notifications could not be enabled.", error);
+        if (!cancelled) setPushStatus("idle");
+      }
+    };
+    enableForSignedInUser();
     return () => { cancelled = true; };
   }, [userName]);
 
   useEffect(() => {
     const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
     const iosDevice = /iphone|ipad|ipod/i.test(window.navigator.userAgent) || (window.navigator.platform === "MacIntel" && window.navigator.maxTouchPoints > 1);
-    setIsStandalone(standalone);
+    const installedState = standalone || window.localStorage.getItem("valcare-installed") === "true";
+    setIsStandalone(installedState);
+    if (installedState) {
+      window.localStorage.setItem("valcare-installed", "true");
+    }
     setIsIos(iosDevice);
     const handleInstallPrompt = (event) => {
       event.preventDefault();
       setInstallPromptEvent(event);
     };
     const handleInstalled = () => {
+      window.localStorage.setItem("valcare-installed", "true");
       setInstallPromptEvent(null);
       setIsStandalone(true);
       setInstallHelpOpen(false);
@@ -226,6 +252,10 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem("valcare-theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    window.localStorage.setItem("valcare-push-status", pushStatus);
+  }, [pushStatus]);
 
   useEffect(() => {
     if (!window.valCareAuth) return undefined;
@@ -439,6 +469,7 @@ function App() {
     if (!window.valCareAuth?.currentUser) {
       setAccountMessage("");
       setAuthMode("create");
+      setAccount({ name: "", email: "", password: "", confirm: "" });
       setActivePanel("create-account");
       return;
     }
@@ -1004,8 +1035,15 @@ function App() {
 
   const registerPushToken = async (user) => {
     if (!window.valCareMessaging || !("serviceWorker" in navigator) || !window.valCareDb) return false;
-    const registration = await navigator.serviceWorker.ready;
-    const token = await window.valCareMessaging.getToken({ serviceWorkerRegistration: registration });
+    if (!window.valCareVapidKey) throw new Error("Firebase Web Push certificate key is not configured.");
+    const registration = await navigator.serviceWorker.register("./sw.js");
+    await navigator.serviceWorker.ready;
+    if (window.valCareMessaging.useServiceWorker) {
+      window.valCareMessaging.useServiceWorker(registration);
+    }
+    const tokenOptions = { serviceWorkerRegistration: registration };
+    if (window.valCareVapidKey) tokenOptions.vapidKey = window.valCareVapidKey;
+    const token = await window.valCareMessaging.getToken(tokenOptions);
     if (!token) return false;
     await window.valCareDb.collection("pushTokens").doc(token).set({
       token,
@@ -1030,7 +1068,7 @@ function App() {
     }
     setPushStatus("loading");
     try {
-      const permission = await Notification.requestPermission();
+      const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
       if (permission !== "granted") {
         setPushStatus(permission === "denied" ? "denied" : "idle");
         return;
@@ -1196,7 +1234,7 @@ function App() {
       {activePanel && <div className="panel-backdrop" onClick={closePanel}>
         <aside className={`account-panel theme-${theme}`} onClick={(event) => event.stopPropagation()}>
           <div className="panel-header"><div><p className="eyebrow">ValCare account</p><h2>{activePanel === "cart" ? text.cart : activePanel === "notifications" ? text.notifications : activePanel === "transactions" ? text.transactions : activePanel === "report" ? "Sales report" : activePanel === "reviews" ? "Product reviews" : activePanel === "inventory" ? "Manage products" : activePanel === "create-account" || (activePanel === "auth" && authMode === "create") ? "Create your account" : activePanel === "auth" ? "Log in" : text.settings}</h2></div><button className="close-button" onClick={closePanel} aria-label="Close panel">×</button></div>
-          {(activePanel === "create-account" || activePanel === "auth") && <div className="panel-content account-form">{isAccountLoading && <div className="account-loading-state"><LoadingSpinner label="Preparing your account" /><span>Finishing your ValCare experience...</span></div>}<p className="account-intro">{authMode === "create" ? "Create your account to collect your ValCare finds." : "Log in to continue shopping and manage your account."}</p><div className="social-auth-grid"><button className="social-auth-button google-auth-button" type="button" onClick={() => signInWithProvider("Google")} disabled={isAccountLoading}><ProviderLogo name="Google" />Continue with Google</button></div><div className="form-divider"><span>or use email</span></div><form onSubmit={authMode === "create" ? createAccount : login}>{authMode === "create" && <input type="text" placeholder="Your name" value={account.name} onChange={(event) => setAccount({ ...account, name: event.target.value })} required />}<input type="email" placeholder="Email address" value={account.email} onChange={(event) => setAccount({ ...account, email: event.target.value })} required /><PasswordInput placeholder="Password" value={account.password} onChange={(event) => setAccount({ ...account, password: event.target.value })} minLength="6" required />{authMode === "create" && <PasswordInput placeholder="Confirm password" value={account.confirm} onChange={(event) => setAccount({ ...account, confirm: event.target.value })} minLength="6" required />}<button className="settings-save" type="submit" disabled={isAccountLoading}>{isAccountLoading ? <LoadingSpinner label="Loading" /> : authMode === "create" ? "Create account" : "Log in"}</button>{accountMessage && <small className="password-message">{accountMessage}</small>}</form><button className="auth-switch" type="button" disabled={isAccountLoading} onClick={() => { setAuthMode(authMode === "create" ? "login" : "create"); setAdminMode(false); setAccountMessage(""); }}>{authMode === "create" ? "Already have an account? Log in" : "New to ValCare? Create an account"}</button></div>}
+          {(activePanel === "create-account" || activePanel === "auth") && <div className="panel-content account-form">{isAccountLoading && <div className="account-loading-state"><LoadingSpinner label="Preparing your account" /><span>Finishing your ValCare experience...</span></div>}<p className="account-intro">{authMode === "create" ? "Create your account to collect your ValCare finds." : "Log in to continue shopping and manage your account."}</p><div className="social-auth-grid"><button className="social-auth-button google-auth-button" type="button" onClick={() => signInWithProvider("Google")} disabled={isAccountLoading}><ProviderLogo name="Google" />Continue with Google</button></div><div className="form-divider"><span>or use email</span></div><form autoComplete={authMode === "create" ? "off" : "on"} onSubmit={authMode === "create" ? createAccount : login}>{authMode === "create" && <input type="text" autoComplete="off" placeholder="Your name" value={account.name} onChange={(event) => setAccount({ ...account, name: event.target.value })} required />}<input type="email" autoComplete={authMode === "create" ? "off" : "email"} placeholder="Email address" value={account.email} onChange={(event) => setAccount({ ...account, email: event.target.value })} required /><PasswordInput autoComplete={authMode === "create" ? "new-password" : "current-password"} placeholder="Password" value={account.password} onChange={(event) => setAccount({ ...account, password: event.target.value })} minLength="6" required />{authMode === "create" && <PasswordInput autoComplete="new-password" placeholder="Confirm password" value={account.confirm} onChange={(event) => setAccount({ ...account, confirm: event.target.value })} minLength="6" required />}<button className="settings-save" type="submit" disabled={isAccountLoading}>{isAccountLoading ? <LoadingSpinner label="Loading" /> : authMode === "create" ? "Create account" : "Log in"}</button>{accountMessage && <small className="password-message">{accountMessage}</small>}</form><button className="auth-switch" type="button" disabled={isAccountLoading} onClick={() => { setAuthMode(authMode === "create" ? "login" : "create"); setAdminMode(false); setAccountMessage(""); }}>{authMode === "create" ? "Already have an account? Log in" : "New to ValCare? Create an account"}</button></div>}
           {activePanel === "wishlist" && !isAdmin && <div className="panel-content"><div className="wishlist-list">{wishlistItems.length ? wishlistItems.map((product) => <article className="wishlist-item" key={product.id}><span className={`cart-thumb ${product.tone}`}>{product.icon}</span><div><strong>{product.name}</strong><span>{formatPrice(product.price)}</span></div><button className="add-button" type="button" onClick={() => addToBag(product)}>Add to bag</button><button className="remove-item" type="button" onClick={() => toggleFavorite(product)} aria-label={`Remove ${product.name} from favorites`}>×</button></article>) : <div className="panel-empty"><p>Your favorite products will appear here.</p></div>}</div></div>}
           {activePanel === "cart" && !isAdmin && <div className="panel-content">
             {orderPlaced && <div className="success-message">Order received. We’ll be in touch shortly.</div>}
