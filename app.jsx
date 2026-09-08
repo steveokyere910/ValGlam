@@ -581,6 +581,7 @@ function App() {
   const editProduct = (product) => {
     setProductForm({ id: product.id, name: product.name, category: product.category, price: product.price, stock: product.stock ?? 0, icon: product.icon || "✨", tone: product.tone || "tone-rose", tag: product.tag || "", imageUrl: product.imageUrl || "" });
     setProductMessage("");
+    window.setTimeout(() => document.querySelector(".product-admin-form")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
   };
 
   const resetProductForm = () => {
