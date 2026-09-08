@@ -23,12 +23,12 @@ messaging.onBackgroundMessage((payload) => {
   self.registration.showNotification(title, options);
 });
 
-const CACHE_NAME = "valcare-v4";
+const CACHE_NAME = "valcare-v5";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./styles.css?v=18",
-  "./app.jsx?v=21",
+  "./styles.css?v=19",
+  "./app.jsx?v=22",
   "./firebase.js",
   "./manifest.webmanifest",
   "./icon-192.png",
