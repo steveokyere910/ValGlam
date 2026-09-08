@@ -119,17 +119,40 @@ exports.verifyPaystackPayment = onCall({ secrets: [paystackSecret] }, async (req
     throw new HttpsError("failed-precondition", "Payment amount does not match the order.");
   }
 
-  await db.collection("orders").doc(reference).create({
-    userId: request.auth.uid,
-    customerName: request.auth.token.name || request.auth.token.email.split("@")[0],
-    customerEmail: request.auth.token.email,
-    items: cart.items,
-    subtotal: cart.subtotal,
-    total: cart.total,
-    currency: cart.currency,
-    status: "paid",
-    paymentReference: reference,
-    createdAt: admin.firestore.FieldValue.serverTimestamp()
+  const quantities = new Map();
+  cart.items.forEach((item) => quantities.set(String(item.id), (quantities.get(String(item.id)) || 0) + 1));
+  const orderRef = db.collection("orders").doc(reference);
+  await db.runTransaction(async (transaction) => {
+    const existingOrder = await transaction.get(orderRef);
+    if (existingOrder.exists) return;
+
+    const productSnapshots = [];
+    for (const productId of quantities.keys()) {
+      productSnapshots.push({ id: productId, snapshot: await transaction.get(db.collection("products").doc(productId)) });
+    }
+    productSnapshots.forEach(({ id, snapshot }) => {
+      if (!snapshot.exists) throw new HttpsError("failed-precondition", "A product in your order is no longer available.");
+      const stock = Number(snapshot.data().stock);
+      const requested = quantities.get(id);
+      if (!Number.isInteger(stock) || stock < requested) {
+        throw new HttpsError("failed-precondition", `${snapshot.data().name || "A product"} does not have enough stock.`);
+      }
+    });
+    productSnapshots.forEach(({ id, snapshot }) => {
+      transaction.update(snapshot.ref, { stock: Number(snapshot.data().stock) - quantities.get(id), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    });
+    transaction.create(orderRef, {
+      userId: request.auth.uid,
+      customerName: request.auth.token.name || request.auth.token.email.split("@")[0],
+      customerEmail: request.auth.token.email,
+      items: cart.items,
+      subtotal: cart.subtotal,
+      total: cart.total,
+      currency: cart.currency,
+      status: "paid",
+      paymentReference: reference,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
   });
   return { orderId: reference, status: "paid" };
 });

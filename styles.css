@@ -247,8 +247,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .stock-label.out-of-stock { color: var(--coral); }
 .add-button:disabled { cursor: not-allowed; opacity: .45; }
 .price { color: var(--deep-sage); font-size: 13px; font-weight: 700; }
-.add-button { background: none; border: 1px solid var(--line); color: var(--ink); font-size: 11px; padding: 8px 10px; transition: background .2s, border-color .2s, color .2s; }
-.add-button:hover { background: var(--ink); border-color: var(--ink); color: white; }
+.add-button { background: #4f9d69; border: 1px solid #4f9d69; color: white; font-size: 11px; font-weight: 700; padding: 8px 10px; transition: background .2s, border-color .2s, color .2s, transform .2s; }
+.add-button:hover { background: #3d7f53; border-color: #3d7f53; color: white; transform: translateY(-1px); }
+.add-button.out-of-stock-button, .add-button.out-of-stock-button:hover { background: #c84c4c; border-color: #c84c4c; color: white; cursor: not-allowed; opacity: 1; transform: none; }
 .admin-product-actions { display: inline-flex; gap: 6px; }
 .admin-edit-button, .admin-delete-button { background: none; border: 1px solid var(--line); color: var(--ink); font-size: 10px; font-weight: 700; padding: 8px 9px; text-transform: uppercase; }
 .admin-edit-button:hover { background: var(--ink); border-color: var(--ink); color: white; }
