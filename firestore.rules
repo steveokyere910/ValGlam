@@ -117,7 +117,7 @@ service cloud.firestore {
 				) || (
 					signedIn()
 					&& request.resource.data.keys().hasOnly(['title', 'message', 'audience', 'recipientId', 'createdAt'])
-					&& request.resource.data.title == "Welcome to Val's Glam"
+					&& request.resource.data.title == "Thank you for joining Val's Glam Shop"
 					&& request.resource.data.message is string
 					&& request.resource.data.audience == 'user'
 					&& request.resource.data.recipientId == request.auth.uid

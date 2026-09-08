@@ -67,6 +67,7 @@ function App() {
   const [cart, setCart] = useState(0);
   const [cartItems, setCartItems] = useState([]);
   const [siteReady, setSiteReady] = useState(false);
+  const [showWelcomeAnimation, setShowWelcomeAnimation] = useState(false);
   const cartOwnerUid = useRef(null);
   const cartHydrated = useRef(false);
   const handledPushNotificationIds = useRef(new Set());
@@ -813,8 +814,8 @@ function App() {
       if (window.valCareDb) {
         try {
           await window.valCareDb.collection("notifications").add({
-            title: "Welcome to Val's Glam",
-            message: `Welcome, ${account.name.trim().split(/\s+/)[0] || "friend"}! We are happy to have you here.`,
+            title: "Thank you for joining Val's Glam Shop",
+            message: `Thank you for joining Val's Glam Shop, ${account.name.trim().split(/\s+/)[0] || "friend"}! We are happy to have you here.`,
             audience: "user",
             recipientId: credential.user.uid,
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -826,7 +827,10 @@ function App() {
       setUserName(account.name.trim().split(/\s+/)[0] || "");
       setAccount({ name: "", email: "", password: "", confirm: "" });
       setAccountMessage("");
-      window.setTimeout(() => setActivePanel(null), 500);
+      setActivePanel(null);
+      setIsAccountLoading(false);
+      setShowWelcomeAnimation(true);
+      window.setTimeout(() => setShowWelcomeAnimation(false), 2800);
     } catch (error) {
       const messages = {
         "auth/email-already-in-use": "An account already exists for this email.",
@@ -1097,6 +1101,7 @@ function App() {
   return (
     <div className={`site-shell theme-${theme} ${siteReady ? "is-visible" : ""}`}>
       {isLanguageLoading && <div className="language-loading" role="status" aria-live="polite"><LoadingSpinner label="Loading language" /></div>}
+      {showWelcomeAnimation && <div className="welcome-animation" role="status" aria-live="polite"><div className="welcome-animation-card"><img src="vals.jpg" alt="Val's Glam Shop" /><div className="welcome-sparkles" aria-hidden="true"><span>✦</span><span>✧</span><span>✦</span></div><p className="eyebrow">A little welcome</p><h2>Thank you for joining</h2><strong>Val's Glam Shop</strong><p>Lovely things are waiting for you.</p></div></div>}
       <div className="announcement">{text.announcement}</div>
       {cartMessage && <div className="cart-toast" role="status" aria-live="polite">{cartMessage}</div>}
       <header className="navbar">
