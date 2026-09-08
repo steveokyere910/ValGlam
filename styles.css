@@ -113,6 +113,25 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .welcome-guide-card > h2 { font-size: 29px; }
 .welcome-guide-list { display: grid; gap: 14px; margin: 22px 0; }
 .welcome-guide-item { align-items: center; border-top: 1px solid var(--line); display: grid; gap: 13px; grid-template-columns: 78px minmax(0, 1fr); padding-top: 14px; }
+.feature-preview { align-items: center; background: var(--purple-soft); border: 1px solid var(--line); border-radius: 12px; color: var(--ink); display: flex; min-height: 78px; padding: 10px; }
+.header-preview { gap: 6px; justify-content: center; }
+.header-preview svg { height: 22px; width: 22px; }
+.header-preview img { height: 25px; object-fit: contain; width: 25px; }
+.header-preview span { font-size: 10px; font-weight: 700; }
+.header-preview b { background: var(--coral); border-radius: 99px; color: white; font-size: 9px; min-width: 17px; padding: 3px; text-align: center; }
+.preview-heart { color: var(--coral); font-size: 25px !important; font-weight: 400 !important; }
+.alert-preview, .install-preview, .settings-preview { align-items: stretch; flex-direction: column; gap: 5px; justify-content: center; }
+.feature-preview button { background: var(--coral); border: 0; color: white; font-size: 8px; font-weight: 700; padding: 6px 5px; text-transform: uppercase; }
+.alert-preview span, .install-preview span, .settings-preview span, .settings-preview small { font-size: 8px; }
+.settings-preview strong { font-size: 9px; }
+.settings-preview input { accent-color: var(--coral); width: 100%; }
+.profile-preview { gap: 6px; justify-content: center; }
+.profile-preview .user-avatar { flex: 0 0 24px; height: 24px; width: 24px; }
+.profile-preview strong { font-size: 9px; }
+.shop-preview { flex-direction: column; gap: 3px; justify-content: center; }
+.shop-preview img { border-radius: 6px; height: 34px !important; object-fit: cover; width: 100%; }
+.shop-preview span { font-size: 8px; font-weight: 700; }
+.install-preview { text-align: center; }
 .welcome-guide-item .welcome-step-image { margin: 0; }
 .welcome-guide-item .welcome-step-image img { height: 78px; object-fit: cover; }
 .welcome-guide-item .welcome-step-image img[src="settings.png"], .welcome-guide-item .welcome-step-image img[src="cart.png"] { padding: 16px; }

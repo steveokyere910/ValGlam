@@ -15,16 +15,16 @@ const categories = ["All pieces", "Beauty", "Accessories", "Home", "Lifestyle"];
 const adminBootstrapEmail = "steveokyere910@gmail.com";
 const currencies = { GHS: { symbol: "GH₵", rate: 1 }, USD: { symbol: "$", rate: 0.078 }, GBP: { symbol: "£", rate: 0.061 } };
 const welcomeSteps = [
-  { image: "image.png", eyebrow: "Start with a little browse", title: "Preview the shop", text: "Shop all, Beauty, Lifestyle, Our story, and Locate us preview the main parts of Val's Glam." },
-  { image: "vals.jpg", eyebrow: "Your account", title: "Profile button", text: "Tap your name or avatar to open your account settings. Log in appears here when you are signed out." },
-  { image: "icon-192.png", eyebrow: "Stay in the loop", title: "Notifications", text: "The bell opens shop updates, delivery messages, and your unread notification count." },
-  { image: "icon-192.png", eyebrow: "Never miss an update", title: "Enable alerts", text: "Tap Enable alerts in Settings to allow delivery and new-product notifications. If permission was denied, tap Allow alerts in your phone browser settings first." },
-  { image: "image.png", eyebrow: "Keep your favorites close", title: "Favorite products", text: "Tap the heart on any product to save it. The heart button in the header opens your saved favorites." },
-  { image: "settings.png", eyebrow: "Personalize your visit", title: "Settings", text: "The gear opens your preferences, security tools, transaction history, and log out." },
-  { image: "settings.png", eyebrow: "Choose your display", title: "Currency and theme", text: "Currency changes prices between GHS, USD, and GBP. Theme switches Light, Dark, or System appearance." },
-  { image: "settings.png", eyebrow: "Make the preview yours", title: "Preview and motion", text: "Cosmetic animations controls the amount of movement in the shop preview. Slide it down for less motion or up for the full effect." },
-  { image: "cart.png", eyebrow: "Ready when you are", title: "Install App", text: "Install App adds Val's Glam to your phone home screen. Follow the short instructions for your browser or iPhone." },
-  { image: "cart.png", eyebrow: "Ready when you are", title: "Shopping bag", text: "The bag holds your selected items. Open it to review quantities, see your subtotal, and start secure checkout." }
+  { feature: "preview", eyebrow: "Start with a little browse", title: "Preview the shop", text: "Shop all, Beauty, Lifestyle, Our story, and Locate us preview the main parts of Val's Glam." },
+  { feature: "profile", eyebrow: "Your account", title: "Profile button", text: "Tap your name or avatar to open your account settings. Log in appears here when you are signed out." },
+  { feature: "notifications", eyebrow: "Stay in the loop", title: "Notifications", text: "The bell opens shop updates, delivery messages, and your unread notification count." },
+  { feature: "alerts", eyebrow: "Never miss an update", title: "Enable alerts", text: "Tap Enable alerts in Settings to allow delivery and new-product notifications. If permission was denied, tap Allow alerts in your phone browser settings first." },
+  { feature: "favorites", eyebrow: "Keep your favorites close", title: "Favorite products", text: "Tap the heart on any product to save it. The heart button in the header opens your saved favorites." },
+  { feature: "settings", eyebrow: "Personalize your visit", title: "Settings", text: "The gear opens your preferences, security tools, transaction history, and log out." },
+  { feature: "currency-theme", eyebrow: "Choose your display", title: "Currency and theme", text: "Currency changes prices between GHS, USD, and GBP. Theme switches Light, Dark, or System appearance." },
+  { feature: "motion", eyebrow: "Make the preview yours", title: "Preview and motion", text: "Cosmetic animations controls the amount of movement in the shop preview. Slide it down for less motion or up for the full effect." },
+  { feature: "install", eyebrow: "Ready when you are", title: "Install App", text: "Install App adds Val's Glam to your phone home screen. Follow the short instructions for your browser or iPhone." },
+  { feature: "cart", eyebrow: "Ready when you are", title: "Shopping bag", text: "The bag holds your selected items. Open it to review quantities, see your subtotal, and start secure checkout." }
 ];
 const translations = {
   en: { settings: "Settings", cart: "Your cart", notifications: "Notifications", transactions: "Transactions", language: "Language", currency: "Currency", theme: "Theme", password: "Change password", save: "Save password", light: "Light", dark: "Dark", system: "System", orderUpdates: "Order updates", offers: "Offers and new drops", viewTransactions: "View transactions", shop: "Shop all", beauty: "Beauty", lifestyle: "Lifestyle", story: "Our story", locate: "Locate us", announcement: "Free delivery on UCC campus.", heroEyebrow: "Small things, soft moments", heroTitle: "Little luxuries for", heroTitleEm: "lovely days.", heroText: "Thoughtful accessories and feel-good finds to make your everyday a little more beautiful.", explore: "Explore the collection", shopEdit: "Shop the", edit: "edit", viewAll: "View all pieces", search: "Search pieces", add: "Add to bag", reviews: "Reviews", newsletterTitle: "A little note from us", newsletterText: "New drops, sweet offers, and good things in your inbox.", join: "Join us", email: "Your email address", cartEmpty: "Your cart is waiting for something lovely.", continueShopping: "Continue shopping", pay: "Pay securely with Paystack" },
@@ -70,6 +70,19 @@ function LoadingSpinner({ label = "Loading" }) {
       <span>{label}</span>
     </span>
   );
+}
+
+function FeaturePreview({ feature }) {
+  if (feature === "notifications") return <div className="feature-preview header-preview"><BellIcon /><span>Notifications</span><b>2</b></div>;
+  if (feature === "alerts") return <div className="feature-preview alert-preview"><span>Shop alerts</span><button type="button">Enable alerts</button></div>;
+  if (feature === "favorites") return <div className="feature-preview header-preview"><span className="preview-heart">♡</span><span>Favorites</span><b>2</b></div>;
+  if (feature === "settings") return <div className="feature-preview header-preview"><img src="settings.png" alt="" /><span>Settings</span></div>;
+  if (feature === "currency-theme") return <div className="feature-preview settings-preview"><span>Currency</span><strong>GHS (GH₵)</strong><span>Theme</span><strong>Light</strong></div>;
+  if (feature === "motion") return <div className="feature-preview settings-preview"><span>Cosmetic animations</span><input type="range" value="65" readOnly aria-label="Cosmetic animations preview" /><small>65% intensity</small></div>;
+  if (feature === "install") return <div className="feature-preview install-preview"><button type="button">Install App</button><span>Add Val's Glam to your home screen</span></div>;
+  if (feature === "cart") return <div className="feature-preview header-preview"><img src="cart.png" alt="" /><span>Shopping bag</span><b>2</b></div>;
+  if (feature === "profile") return <div className="feature-preview profile-preview"><span className="user-avatar">A</span><strong>Account settings</strong></div>;
+  return <div className="feature-preview shop-preview"><img src="image.png" alt="" /><span>Shop the edit</span><button type="button">View all pieces</button></div>;
 }
 
 function App() {
@@ -1171,7 +1184,7 @@ function App() {
   return (
     <div className={`site-shell theme-${theme} ${siteReady ? "is-visible" : ""}`}>
       {isLanguageLoading && <div className="language-loading" role="status" aria-live="polite"><LoadingSpinner label="Loading language" /></div>}
-      {showWelcomeAnimation && <div className="welcome-animation" role="dialog" aria-modal="true" aria-labelledby="welcome-guide-title"><div className="welcome-animation-card welcome-guide-card"><button className="welcome-skip" type="button" onClick={() => setShowWelcomeAnimation(false)}>Skip</button><div className="welcome-sparkles" aria-hidden="true"><span>✦</span><span>✧</span><span>✦</span></div><p className="eyebrow">Your Val's Glam guide</p><h2 id="welcome-guide-title">Everything you need to know</h2><p className="welcome-step-text">Scroll through the guide to see every header button and setting.</p><div className="welcome-guide-list">{welcomeSteps.map((step, index) => <article className="welcome-guide-item" key={step.title}><div className="welcome-step-image"><img src={step.image} alt="" /></div><div><p className="eyebrow">{index + 1}. {step.eyebrow}</p><h3>{step.title}</h3><p className="welcome-step-text">{step.text}</p></div></article>)}</div><button className="settings-save welcome-guide-finish" type="button" onClick={() => setShowWelcomeAnimation(false)}>Start exploring</button></div></div>}
+      {showWelcomeAnimation && <div className="welcome-animation" role="dialog" aria-modal="true" aria-labelledby="welcome-guide-title"><div className="welcome-animation-card welcome-guide-card"><button className="welcome-skip" type="button" onClick={() => setShowWelcomeAnimation(false)}>Skip</button><div className="welcome-sparkles" aria-hidden="true"><span>✦</span><span>✧</span><span>✦</span></div><p className="eyebrow">Your Val's Glam guide</p><h2 id="welcome-guide-title">Everything you need to know</h2><p className="welcome-step-text">Scroll through the guide to see every header button and setting.</p><div className="welcome-guide-list">{welcomeSteps.map((step, index) => <article className="welcome-guide-item" key={step.title}><FeaturePreview feature={step.feature} /><div><p className="eyebrow">{index + 1}. {step.eyebrow}</p><h3>{step.title}</h3><p className="welcome-step-text">{step.text}</p></div></article>)}</div><button className="settings-save welcome-guide-finish" type="button" onClick={() => setShowWelcomeAnimation(false)}>Start exploring</button></div></div>}
       <div className="announcement">{text.announcement}</div>
       {cartMessage && <div className="cart-toast" role="status" aria-live="polite">{cartMessage}</div>}
       <header className="navbar">
