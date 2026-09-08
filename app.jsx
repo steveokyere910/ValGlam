@@ -85,6 +85,7 @@ function App() {
   const [preferences, setPreferences] = useState({ updates: true, offers: false });
   const [currency, setCurrency] = useState("GHS");
   const [language, setLanguage] = useState(() => ["en", "tw", "fr"].includes(window.localStorage.getItem("valcare-language")) ? window.localStorage.getItem("valcare-language") : "en");
+  const [isLanguageLoading, setIsLanguageLoading] = useState(false);
   const [theme, setTheme] = useState(() => ["light", "dark", "system"].includes(window.localStorage.getItem("valcare-theme")) ? window.localStorage.getItem("valcare-theme") : "light");
   const [cosmeticMotion, setCosmeticMotion] = useState(65);
   const [password, setPassword] = useState({ current: "", next: "", confirm: "" });
@@ -873,6 +874,15 @@ function App() {
     }, 240);
   };
 
+  const changeLanguage = (nextLanguage) => {
+    if (nextLanguage === language || isLanguageLoading) return;
+    setIsLanguageLoading(true);
+    window.setTimeout(() => {
+      setLanguage(nextLanguage);
+      setIsLanguageLoading(false);
+    }, 420);
+  };
+
   const confirmLogout = () => {
     setConfirmDialog({
       title: "Log out?",
@@ -919,6 +929,7 @@ function App() {
 
   return (
     <div className={`site-shell theme-${theme} ${siteReady ? "is-visible" : ""}`}>
+      {isLanguageLoading && <div className="language-loading" role="status" aria-live="polite"><LoadingSpinner label="Loading language" /></div>}
       <div className="announcement">{text.announcement}</div>
       {cartMessage && <div className="cart-toast" role="status" aria-live="polite">{cartMessage}</div>}
       <header className="navbar">
@@ -1015,7 +1026,7 @@ function App() {
           {activePanel === "reviews" && selectedProduct && <div className="panel-content reviews-panel"><div className="reviews-product"><span className={`cart-thumb ${selectedProduct.tone}`}>{selectedProduct.icon}</span><div><strong>{selectedProduct.name}</strong><span>{formatPrice(selectedProduct.price)}</span></div></div><div className="review-list">{reviews.length ? reviews.map((review) => <article className="review-item" key={review.id}><div className="review-meta"><strong>{review.userName}</strong><span>{"★".repeat(review.rating)}{"☆".repeat(5 - review.rating)}</span></div><p>{review.comment}</p></article>) : <p className="review-empty">No reviews yet. Be the first to share your thoughts.</p>}</div><form className="review-form" onSubmit={submitReview}><label htmlFor="review-rating">Your rating</label><select id="review-rating" value={reviewRating} onChange={(event) => setReviewRating(event.target.value)}><option value="5">★★★★★</option><option value="4">★★★★☆</option><option value="3">★★★☆☆</option><option value="2">★★☆☆☆</option><option value="1">★☆☆☆☆</option></select><textarea value={reviewText} onChange={(event) => setReviewText(event.target.value)} placeholder="Share your thoughts" maxLength="500" required /><button className="settings-save" type="submit" disabled={isSubmittingReview}>{isSubmittingReview ? "Saving review..." : "Add review"}</button>{reviewMessage && <small className="password-message">{reviewMessage}</small>}</form></div>}
           {activePanel === "settings" && <div className="panel-content settings-list">
             <div className="setting-control"><label htmlFor="currency">{text.currency}</label><select id="currency" value={currency} onChange={(event) => setCurrency(event.target.value)}>{Object.keys(currencies).map((code) => <option key={code} value={code}>{code} ({currencies[code].symbol})</option>)}</select></div>
-            <div className="setting-control"><label htmlFor="language">{text.language}</label><select id="language" value={language} onChange={(event) => setLanguage(event.target.value)}><option value="en">English</option><option value="tw">Twi</option><option value="fr">Français</option></select></div>
+            <div className="setting-control"><label htmlFor="language">{text.language}</label><select id="language" value={language} onChange={(event) => changeLanguage(event.target.value)} disabled={isLanguageLoading}><option value="en">English</option><option value="tw">Twi</option><option value="fr">Français</option></select></div>
             <div className="setting-control"><label htmlFor="theme">{text.theme}</label><select id="theme" value={theme} onChange={(event) => setTheme(event.target.value)}><option value="light">{text.light}</option><option value="dark">{text.dark}</option><option value="system">{text.system}</option></select></div>
             <div className="motion-control"><label htmlFor="cosmetic-motion">Cosmetic animations</label><input id="cosmetic-motion" type="range" min="0" max="100" step="5" value={cosmeticMotion} onChange={(event) => setCosmeticMotion(Number(event.target.value))} /><small>{cosmeticMotion === 0 ? "Off" : `${cosmeticMotion}% intensity`}</small></div>
             <label><span><strong>{text.orderUpdates}</strong><small>Get delivery and order notifications</small></span><input type="checkbox" checked={preferences.updates} onChange={() => setPreferences((current) => ({ ...current, updates: !current.updates }))} /></label><label><span><strong>{text.offers}</strong><small>Hear about fresh ValCare finds</small></span><input type="checkbox" checked={preferences.offers} onChange={() => setPreferences((current) => ({ ...current, offers: !current.offers }))} /></label>
