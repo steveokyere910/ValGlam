@@ -64,7 +64,8 @@ export default {
         headers: { Authorization: `Bearer ${env.PAYSTACK_SECRET_KEY}` }
       });
       const result = await response.json();
-      if (!response.ok || !result.status || result.data?.status !== "success") return json({ error: "Payment has not been confirmed." }, 400, origin);
+      if (!response.ok || !result.status) return json({ error: "Payment has not been confirmed." }, 400, origin);
+      if (result.data?.status !== "success") return json({ status: result.data?.status || "failed", reference }, 200, origin);
       return json({ status: "paid", reference }, 200, origin);
     }
 

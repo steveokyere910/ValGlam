@@ -295,6 +295,16 @@ function App() {
           const result = await response.json();
           if (!response.ok) throw new Error(result.error || "Payment could not be confirmed.");
           window.history.replaceState({}, document.title, window.location.pathname);
+          if (["abandoned", "canceled", "cancelled"].includes(String(result.status || "").toLowerCase())) {
+            const message = "Your payment was canceled. If this was an error, you can try again.";
+            setOrderMessage(message);
+            setActivePanel("cart");
+            playNotificationSound();
+            if ("Notification" in window && Notification.permission === "granted") {
+              new Notification("Payment canceled", { body: message, icon: "icon-192.png", tag: `payment-canceled-${reference}` });
+            }
+            return;
+          }
           setOrderPlaced(true);
           setActivePanel("cart");
           window.trackValCareEvent?.("purchase", { transaction_id: reference });
