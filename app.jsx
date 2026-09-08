@@ -86,6 +86,8 @@ function App() {
   const [currency, setCurrency] = useState("GHS");
   const [language, setLanguage] = useState(() => ["en", "tw", "fr"].includes(window.localStorage.getItem("valcare-language")) ? window.localStorage.getItem("valcare-language") : "en");
   const [isLanguageLoading, setIsLanguageLoading] = useState(false);
+  const [pushStatus, setPushStatus] = useState("idle");
+  const audioContextRef = useRef(null);
   const [installPromptEvent, setInstallPromptEvent] = useState(null);
   const [installHelpOpen, setInstallHelpOpen] = useState(false);
   const [isIos, setIsIos] = useState(false);
@@ -166,6 +168,18 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem("valcare-language", language);
   }, [language]);
+
+  useEffect(() => {
+    if (!window.valCareMessaging) return undefined;
+    return window.valCareMessaging.onMessage((payload) => {
+      const title = payload.notification?.title || "ValCare update";
+      const body = payload.notification?.body || "You have a new ValCare notification.";
+      playNotificationSound();
+      if (document.visibilityState === "visible" && "Notification" in window && Notification.permission === "granted") {
+        new Notification(title, { body, icon: "icon-192.png", tag: payload.data?.notificationId || "valcare-notification" });
+      }
+    });
+  }, []);
 
   useEffect(() => {
     const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
@@ -909,6 +923,60 @@ function App() {
     }, 420);
   };
 
+  const playNotificationSound = () => {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    audioContextRef.current ||= new AudioContext();
+    const context = audioContextRef.current;
+    if (context.state === "suspended") context.resume();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.frequency.value = 740;
+    oscillator.type = "sine";
+    gain.gain.setValueAtTime(0.0001, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.12, context.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.28);
+    oscillator.connect(gain).connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.3);
+  };
+
+  const enablePushNotifications = async () => {
+    const user = window.valCareAuth?.currentUser;
+    if (!user) {
+      setAuthMode("login");
+      setAccountMessage("Sign in to enable ValCare alerts.");
+      setActivePanel("auth");
+      return;
+    }
+    if (!window.valCareMessaging || !("Notification" in window) || !("serviceWorker" in navigator)) {
+      setPushStatus("unsupported");
+      return;
+    }
+    setPushStatus("loading");
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        setPushStatus(permission === "denied" ? "denied" : "idle");
+        return;
+      }
+      const registration = await navigator.serviceWorker.ready;
+      const token = await window.valCareMessaging.getToken({ serviceWorkerRegistration: registration });
+      if (!token || !window.valCareDb) throw new Error("Push registration unavailable.");
+      await window.valCareDb.collection("pushTokens").doc(token).set({
+        token,
+        userId: user.uid,
+        email: user.email || "",
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      setPushStatus("enabled");
+      playNotificationSound();
+    } catch (error) {
+      console.warn("Push notifications are unavailable.", error);
+      setPushStatus("idle");
+    }
+  };
+
   const installApp = async () => {
     if (isIos || !installPromptEvent) {
       setInstallHelpOpen(true);
@@ -968,6 +1036,7 @@ function App() {
       {isLanguageLoading && <div className="language-loading" role="status" aria-live="polite"><LoadingSpinner label="Loading language" /></div>}
       <div className="announcement">{text.announcement}</div>
       {cartMessage && <div className="cart-toast" role="status" aria-live="polite">{cartMessage}</div>}
+      {userName && pushStatus !== "enabled" && <button className="push-enable-button" type="button" onClick={enablePushNotifications} disabled={pushStatus === "loading"}>{pushStatus === "loading" ? "Enabling alerts..." : pushStatus === "denied" ? "Allow alerts in browser settings" : "Enable alerts"}</button>}
       <header className="navbar">
         <a className="logo" href="#top" aria-label="Val's Glam Accessories home"><img className="brand-logo" src="vals.jpg" alt="Val's Glam Accessories" /><span className="logo-name">Val's Glam Accessories</span></a>
         <nav className="nav-links" aria-label="Main navigation">

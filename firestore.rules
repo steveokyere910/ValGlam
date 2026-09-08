@@ -130,6 +130,18 @@ service cloud.firestore {
 			allow read, write: if admin();
 		}
 
+		match /pushTokens/{tokenId} {
+			allow create, update: if signedIn()
+				&& request.resource.data.userId == request.auth.uid
+				&& request.resource.data.token is string
+				&& request.resource.data.token.size() > 0
+				&& request.resource.data.token.size() <= 4096
+				&& request.resource.data.email is string
+				&& request.resource.data.updatedAt is timestamp
+				&& request.resource.data.keys().hasOnly(['token', 'userId', 'email', 'updatedAt']);
+			allow read, delete: if signedIn() && resource.data.userId == request.auth.uid;
+		}
+
 		match /subscribers/{subscriberId} {
 			allow create, update: if subscriberId == request.resource.data.email
 				&& request.resource.data.email is string

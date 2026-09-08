@@ -26,6 +26,13 @@ try {
   window.valCareStorage = null;
 }
 
+try {
+  window.valCareMessaging = firebase.messaging();
+} catch (error) {
+  window.valCareMessaging = null;
+  console.info("ValCare push notifications are unavailable in this browser.");
+}
+
 async function saveValCareStaff(staff) {
   if (!window.valCareDb) throw new Error("Firestore is unavailable.");
   return window.valCareDb.collection("staff").add({

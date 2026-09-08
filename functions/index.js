@@ -1,4 +1,5 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 
@@ -131,4 +132,39 @@ exports.verifyPaystackPayment = onCall({ secrets: [paystackSecret] }, async (req
     createdAt: admin.firestore.FieldValue.serverTimestamp()
   });
   return { orderId: reference, status: "paid" };
+});
+
+exports.sendNotificationPush = onDocumentCreated("notifications/{notificationId}", async (event) => {
+  const notification = event.data?.data();
+  if (!notification?.title || !notification?.message) return;
+
+  const tokenQuery = notification.audience === "user"
+    ? db.collection("pushTokens").where("userId", "==", notification.recipientId)
+    : db.collection("pushTokens");
+  const tokenSnapshot = await tokenQuery.get();
+  const tokenDocuments = tokenSnapshot.docs.filter((document) => document.data().token);
+  const tokens = tokenDocuments.map((document) => document.data().token);
+  if (!tokens.length) return;
+
+  const response = await admin.messaging().sendEachForMulticast({
+    tokens,
+    notification: { title: notification.title, body: notification.message },
+    data: { notificationId: event.params.notificationId },
+    webpush: {
+      notification: {
+        title: notification.title,
+        body: notification.message,
+        icon: "/icon-192.png",
+        badge: "/icon-192.png",
+        silent: false
+      },
+      fcmOptions: { link: "/" }
+    }
+  });
+
+  const cleanup = tokenDocuments.filter((document, index) => {
+    const errorCode = response.responses[index]?.error?.code;
+    return errorCode === "messaging/registration-token-not-registered" || errorCode === "messaging/invalid-registration-token";
+  });
+  await Promise.all(cleanup.map((document) => document.ref.delete()));
 });
