@@ -32,11 +32,15 @@ function BellIcon() {
 function SettingsIcon() {
   return <svg aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.8 1.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5v.1h-2.6v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1-1.8-1.8.1-.1A1.7 1.7 0 0 0 8 15a1.7 1.7 0 0 0-1.5-1H6.4v-2.6h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1 1.8-1.8.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5v-.1H15v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1 1.8 1.8-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.1V14h-.1a1.7 1.7 0 0 0-1.5 1Z" /></svg>;
 }
-function SocialIcon({ name }) {
+function LegacySocialIcon({ name }) {
   if (name === "telegram") return <svg aria-hidden="true" className="social-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M21.7 3.4 18.5 20c-.2 1.2-.9 1.5-1.8.9l-5-3.7-2.4 2.3c-.3.3-.5.5-1 .5l.4-5.1 9.3-8.4c.4-.4-.1-.6-.6-.2L5.9 13.7.9 12.1c-1.1-.3-1.1-1.1.2-1.6L20.6 3c.9-.3 1.6.2 1.1.4Z" /></svg>;
   if (name === "whatsapp") return <svg aria-hidden="true" className="social-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a9.9 9.9 0 0 0-8.6 14.8L2 22l5.4-1.4A10 10 0 1 0 12 2Zm0 18.1a8.1 8.1 0 0 1-4.1-1.1l-.3-.2-3.2.8.9-3.1-.2-.3A8.1 8.1 0 1 1 12 20.1Zm4.5-6c-.2-.1-1.4-.7-1.6-.7-.2-.1-.4-.1-.5.1-.2.2-.6.7-.7.8-.1.2-.3.2-.5.1-1.4-.7-2.3-1.2-3.2-2.7-.2-.3.2-.3.6-1 .1-.2 0-.4 0-.5l-.7-1.7c-.2-.5-.4-.4-.5-.4h-.5c-.2 0-.5.1-.7.3-.9.9-.8 2.1-.2 3.1 1.2 2.1 2.9 3.8 5.1 4.7 1.4.6 2 .6 2.7.5.4-.1 1.4-.6 1.6-1.2.2-.6.2-1.1.1-1.2 0-.1-.2-.1-.4-.2Z" /></svg>;
   if (name === "tiktok") return <svg aria-hidden="true" className="social-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M16.7 3c.2 1.8 1.2 2.9 3 3v3.1c-1.7.2-3.1-.4-4.4-1.2v6.4c0 5.2-5.7 6.8-8.9 4.1-3.1-2.5-1.9-7.7 2.1-8.7 1.1-.3 2.1-.1 3 .3v3.2c-.3-.1-.6-.3-1-.3-1.7-.1-2.7 1.5-2.1 2.7.6 1.2 2.4 1.3 3.2.3.4-.5.4-1.1.4-1.8V3h4.7Z" /></svg>;
   return <svg aria-hidden="true" className="social-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.2c-3.8 0-6.7 2.8-6.7 7 0 2.3-.1 3.1-1.2 4.3-.3.4-.2.9.3 1.1.7.3 1.6.5 2.5.6.2.7.5 1.4 1 1.8.4.3.8.2 1.2.1.6-.2 1.2-.1 1.8.2.4.2.7.8 1.1 1.6.1.3.5.5 1 .5s.9-.2 1-.5c.4-.8.7-1.4 1.1-1.6.6-.3 1.2-.4 1.8-.2.4.1.8.2 1.2-.1.5-.4.8-1.1 1-1.8.9-.1 1.8-.3 2.5-.6.5-.2.6-.7.3-1.1-1.1-1.2-1.2-2-1.2-4.3 0-4.2-2.9-7-6.7-7Zm-2 7.2a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm4 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z" /></svg>;
+}
+function SocialIcon({ name }) {
+  const icons = { telegram: "Telegram.webp", whatsapp: "whatapp.jpg", snapchat: "snapchat.webp", tiktok: "Tiktok.webp" };
+  return <img aria-hidden="true" className="social-icon" src={icons[name]} alt="" />;
 }
 function ProviderLogo({ name }) {
   if (name === "Google") return <svg className="provider-logo" aria-hidden="true" viewBox="0 0 24 24"><path fill="#4285F4" d="M21.35 12.27c0-.72-.06-1.42-.18-2.09H12v3.95h5.24a4.48 4.48 0 0 1-1.94 2.94v2.45h3.14c1.84-1.69 2.91-4.18 2.91-7.25Z"/><path fill="#34A853" d="M12 21.5c2.63 0 4.84-.87 6.45-2.35l-3.14-2.45c-.87.58-1.98.92-3.31.92-2.54 0-4.7-1.72-5.47-4.03H3.29v2.53A9.74 9.74 0 0 0 12 21.5Z"/><path fill="#FBBC05" d="M6.53 13.59A5.85 5.85 0 0 1 6.22 12c0-.55.11-1.09.31-1.59V7.88H3.29A9.74 9.74 0 0 0 2.25 12c0 1.57.38 3.06 1.04 4.12l3.24-2.53Z"/><path fill="#EA4335" d="M12 6.38c1.43 0 2.71.49 3.72 1.46l2.79-2.79C16.84 3.48 14.63 2.5 12 2.5a9.74 9.74 0 0 0-8.71 5.38l3.24 2.53C7.3 8.1 9.46 6.38 12 6.38Z"/></svg>;
@@ -1093,15 +1097,15 @@ function App() {
         <div className={`nav-actions ${isAdmin ? "admin-nav-actions" : "client-nav-actions"}`}>
           {userName ? <button className={`user-name ${isAdmin ? "admin-user-name" : ""}`} onClick={() => openPanelWithLoading(isAdmin ? "inventory" : "settings")} aria-label={isAdmin ? "Open admin dashboard" : "Open account settings"} title={userName}>{loadingAction === (isAdmin ? "inventory" : "settings") ? <LoadingSpinner label="Opening" /> : <><span className="user-avatar">{userName.charAt(0).toUpperCase()}</span><span className="user-display-name">{userName}</span></>}</button> : <button className="login-link" onClick={() => { setAuthMode("login"); setAccountMessage(""); openPanelWithLoading("auth"); }}>{loadingAction === "auth" ? <LoadingSpinner label="Opening" /> : "Log in"}</button>}
           {!isAdmin && <button className="icon-button panel-trigger" aria-label={`View notifications${unreadNotificationCount ? `, ${unreadNotificationCount} unread` : ""}`} title="Notifications" onClick={() => { openNotifications(); setLoadingAction("notifications"); window.setTimeout(() => setLoadingAction(null), 260); }}>{loadingAction === "notifications" ? <LoadingSpinner label="" /> : <><BellIcon />{unreadNotificationCount > 0 && <span className="cart-count notification-count">{unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}</span>}</>}</button>}
-          {!isAdmin && userName && <button className="icon-button" aria-label="Open favorite products" title="Wishlist" onClick={() => openPanelWithLoading("wishlist")}>{loadingAction === "wishlist" ? <LoadingSpinner label="" /> : <>♡<span className="cart-count">{wishlistItems.length}</span></>}</button>}
+          {!isAdmin && userName && <button className="icon-button wishlist-button" aria-label="Open favorite products" title="Wishlist" onClick={() => openPanelWithLoading("wishlist")}>{loadingAction === "wishlist" ? <LoadingSpinner label="" /> : <>♡<span className="cart-count">{wishlistItems.length}</span></>}</button>}
           {userName && pushStatus !== "enabled" && <button className="push-enable-button" type="button" onClick={enablePushNotifications} disabled={pushStatus === "loading"}>{pushStatus === "loading" ? "Enabling alerts..." : pushStatus === "denied" ? "Allow alerts" : "Enable alerts"}</button>}
           {!isStandalone && <button className="install-app-button" type="button" onClick={installApp}>Install App</button>}
-          <button className="icon-button settings-button" aria-label="Open settings" title="Settings" onClick={() => openPanelWithLoading("settings")}>{loadingAction === "settings" ? <LoadingSpinner label="" /> : <SettingsIcon />}</button>
+          <button className="icon-button settings-button" aria-label="Open settings" title="Settings" onClick={() => openPanelWithLoading("settings")}>{loadingAction === "settings" ? <LoadingSpinner label="" /> : <img src="settings.png" alt="" />}</button>
           <div className="secondary-nav-actions">
             {isAdmin && <button className="icon-button admin-inventory-icon" aria-label="Manage products and stock" title="Manage products" onClick={openNewProductForm}>{loadingAction === "inventory" ? <LoadingSpinner label="" /> : "✦"}</button>}
             {isAdmin && <button className="icon-button" aria-label="Open sales report" title="Sales report" onClick={() => handleLoadingAction("report", openAdminReport)}>{loadingAction === "report" ? <LoadingSpinner label="" /> : "▥"}</button>}
           </div>
-          {!isAdmin && <button className="icon-button" aria-label={`${cart} items in bag`} title="Shopping bag" onClick={() => openPanelWithLoading("cart")}>{loadingAction === "cart" ? <LoadingSpinner label="" /> : <><BagIcon /><span className="cart-count">{cart}</span></>}</button>}
+          {!isAdmin && <button className="icon-button cart-button" aria-label={`${cart} items in bag`} title="Shopping bag" onClick={() => openPanelWithLoading("cart")}>{loadingAction === "cart" ? <LoadingSpinner label="" /> : <><img src="cart.png" alt="" /><span className="cart-count">{cart}</span></>}</button>}
         </div>
       </header>
 
@@ -1156,10 +1160,12 @@ function App() {
         <div className="footer-contact">
           <strong>Contact Val's Glam</strong>
           <a className="footer-phone" href="tel:+233594972748">Call us on +233 59 497 2748</a>
-          <a href="https://t.me/MsVallerie_2" target="_blank" rel="noreferrer" aria-label="Contact ValCare on Telegram"><SocialIcon name="telegram" /></a>
-          <a href="https://wa.me/233594972748" target="_blank" rel="noreferrer" aria-label="Contact ValCare on WhatsApp"><SocialIcon name="whatsapp" /></a>
-          <a href="https://www.snapchat.com/add/nharnaakuah_2" target="_blank" rel="noreferrer" aria-label="Contact ValCare on Snapchat"><SocialIcon name="snapchat" /></a>
-          <a href="https://www.tiktok.com/@ms_valcaresil" target="_blank" rel="noreferrer" aria-label="Contact ValCare on TikTok"><SocialIcon name="tiktok" /></a>
+          <div className="footer-socials">
+            <a href="https://t.me/MsVallerie_2" target="_blank" rel="noreferrer" aria-label="Contact Val's Glam on Telegram"><SocialIcon name="telegram" /></a>
+            <a href="https://wa.me/233594972748" target="_blank" rel="noreferrer" aria-label="Contact Val's Glam on WhatsApp"><SocialIcon name="whatsapp" /></a>
+            <a href="https://www.snapchat.com/add/nharnaakuah_2" target="_blank" rel="noreferrer" aria-label="Contact Val's Glam on Snapchat"><SocialIcon name="snapchat" /></a>
+            <a href="https://www.tiktok.com/@ms_valcaresil" target="_blank" rel="noreferrer" aria-label="Contact Val's Glam on TikTok"><SocialIcon name="tiktok" /></a>
+          </div>
         </div>
         <div>© 2026 Val's Glam · Made for your everyday.</div>
       </footer>
