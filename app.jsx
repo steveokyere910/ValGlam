@@ -172,8 +172,8 @@ function App() {
   useEffect(() => {
     if (!window.valCareMessaging) return undefined;
     return window.valCareMessaging.onMessage((payload) => {
-      const title = payload.notification?.title || "ValCare update";
-      const body = payload.notification?.body || "You have a new ValCare notification.";
+      const title = payload.notification?.title || "Val's Glam update";
+      const body = payload.notification?.body || "You have a new Val's Glam notification.";
       playNotificationSound();
       if (document.visibilityState === "visible" && "Notification" in window && Notification.permission === "granted") {
         new Notification(title, { body, icon: "icon-192.png", tag: payload.data?.notificationId || "valcare-notification" });
@@ -493,8 +493,8 @@ function App() {
       if (order?.userId) {
         try {
           await window.valCareDb.collection("notifications").add({
-            title: "Your ValCare delivery is complete",
-            message: "Your order has been marked as delivered by the ValCare team. Thank you for trading with Val's Glam.",
+            title: "Your Val's Glam delivery is complete",
+            message: "Your order has been marked as delivered by the Val's Glam team. Thank you for shopping with us.",
             audience: "user",
             recipientId: order.userId,
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -762,7 +762,7 @@ function App() {
       if (window.valCareDb) {
         try {
           await window.valCareDb.collection("notifications").add({
-            title: "Welcome to ValCare",
+            title: "Welcome to Val's Glam",
             message: `Welcome, ${account.name.trim().split(/\s+/)[0] || "friend"}! We are happy to have you here.`,
             audience: "user",
             recipientId: credential.user.uid,
@@ -945,7 +945,7 @@ function App() {
     const user = window.valCareAuth?.currentUser;
     if (!user) {
       setAuthMode("login");
-      setAccountMessage("Sign in to enable ValCare alerts.");
+      setAccountMessage("Sign in to enable Val's Glam alerts.");
       setActivePanel("auth");
       return;
     }
@@ -1100,26 +1100,26 @@ function App() {
         <section className="newsletter">
           <h2>{text.newsletterTitle}</h2>
           <p>{text.newsletterText}</p>
-          {subscribed ? <p>You're on the list. Welcome to ValCare.</p> : <><form className="subscribe" onSubmit={subscribe}><input value={email} onChange={(event) => setEmail(event.target.value)} type="email" placeholder="Your email address" aria-label="Your email address" required /><button type="submit" disabled={isSubscribing}>{isSubscribing ? "Saving..." : "Join us"}</button></form>{subscribeMessage && <small className="subscribe-message">{subscribeMessage}</small>}</>}
+          {subscribed ? <p>You're on the list. Welcome to Val's Glam.</p> : <><form className="subscribe" onSubmit={subscribe}><input value={email} onChange={(event) => setEmail(event.target.value)} type="email" placeholder="Your email address" aria-label="Your email address" required /><button type="submit" disabled={isSubscribing}>{isSubscribing ? "Saving..." : "Join us"}</button></form>{subscribeMessage && <small className="subscribe-message">{subscribeMessage}</small>}</>}
         </section>
       </main>
       <footer>
         <div className="footer-contact">
-          <strong>Contact ValCare</strong>
+          <strong>Contact Val's Glam</strong>
           <a className="footer-phone" href="tel:+233594972748">Call us on +233 59 497 2748</a>
           <a href="https://t.me/MsVallerie_2" target="_blank" rel="noreferrer" aria-label="Contact ValCare on Telegram"><SocialIcon name="telegram" /></a>
           <a href="https://wa.me/233594972748" target="_blank" rel="noreferrer" aria-label="Contact ValCare on WhatsApp"><SocialIcon name="whatsapp" /></a>
           <a href="https://www.snapchat.com/add/nharnaakuah_2" target="_blank" rel="noreferrer" aria-label="Contact ValCare on Snapchat"><SocialIcon name="snapchat" /></a>
           <a href="https://www.tiktok.com/@ms_valcaresil" target="_blank" rel="noreferrer" aria-label="Contact ValCare on TikTok"><SocialIcon name="tiktok" /></a>
         </div>
-        <div>© 2026 ValCare · Made for your everyday.</div>
+        <div>© 2026 Val's Glam · Made for your everyday.</div>
       </footer>
       {installHelpOpen && ReactDOM.createPortal(<div className="install-help-backdrop" role="presentation" onClick={() => setInstallHelpOpen(false)}>
         <section className="install-help" role="dialog" aria-modal="true" aria-labelledby="install-help-title" onClick={(event) => event.stopPropagation()}>
           <button className="close-button" type="button" onClick={() => setInstallHelpOpen(false)} aria-label="Close install instructions">×</button>
-          <p className="eyebrow">ValCare app</p>
-          <h2 id="install-help-title">Install ValCare</h2>
-          {isIos ? <ol><li>Tap the <strong>Share</strong> button in Safari.</li><li>Choose <strong>Add to Home Screen</strong>.</li><li>Tap <strong>Add</strong> to finish.</li></ol> : <p>Open your browser menu and choose <strong>Install ValCare</strong> or <strong>Add to Home screen</strong>. The exact wording depends on your browser.</p>}
+          <p className="eyebrow">Val's Glam app</p>
+          <h2 id="install-help-title">Install Val's Glam</h2>
+          {isIos ? <ol><li>Tap the <strong>Share</strong> button in Safari.</li><li>Choose <strong>Add to Home Screen</strong>.</li><li>Tap <strong>Add</strong> to finish.</li></ol> : <p>Open your browser menu and choose <strong>Install Val's Glam</strong> or <strong>Add to Home screen</strong>. The exact wording depends on your browser.</p>}
           <button className="settings-save" type="button" onClick={() => setInstallHelpOpen(false)}>Got it</button>
         </section>
       </div>, document.body)}

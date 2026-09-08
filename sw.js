@@ -11,9 +11,9 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
-  const title = payload.notification?.title || "ValCare update";
+  const title = payload.notification?.title || "Val's Glam update";
   const options = {
-    body: payload.notification?.body || "You have a new ValCare notification.",
+    body: payload.notification?.body || "You have a new Val's Glam notification.",
     icon: "./icon-192.png",
     badge: "./icon-192.png",
     tag: payload.data?.notificationId || "valcare-notification",
