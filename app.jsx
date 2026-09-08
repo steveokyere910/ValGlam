@@ -47,12 +47,22 @@ function PasswordInput(props) {
   return <div className="password-field"><input {...props} type={visible ? "text" : "password"} /><button className="password-toggle" type="button" onClick={() => setVisible((current) => !current)} aria-label={visible ? "Hide password" : "Show password"} title={visible ? "Hide password" : "Show password"}>{visible ? "Hide" : "Show"}</button></div>;
 }
 
+function LoadingSpinner({ label = "Loading" }) {
+  return (
+    <span className="loading-inline" aria-live="polite" aria-label={label}>
+      <span className="loading-ring" aria-hidden="true" />
+      <span>{label}</span>
+    </span>
+  );
+}
+
 function App() {
   const [products, setProducts] = useState(defaultProducts);
   const [activeCategory, setActiveCategory] = useState("All pieces");
   const [query, setQuery] = useState("");
   const [cart, setCart] = useState(0);
   const [cartItems, setCartItems] = useState([]);
+  const [siteReady, setSiteReady] = useState(false);
   const cartOwnerUid = useRef(null);
   const cartHydrated = useRef(false);
   const [cartMessage, setCartMessage] = useState("");
@@ -61,8 +71,13 @@ function App() {
   const [notifications, setNotifications] = useState([]);
   const [readNotificationIds, setReadNotificationIds] = useState([]);
   const [adminOrders, setAdminOrders] = useState([]);
+  const [reportView, setReportView] = useState("pending");
+  const [selectedOrderId, setSelectedOrderId] = useState(null);
+  const [deliveringOrderId, setDeliveringOrderId] = useState(null);
   const [isLoadingReport, setIsLoadingReport] = useState(false);
+  const [loadingAction, setLoadingAction] = useState(null);
   const [activePanel, setActivePanel] = useState(null);
+  const [isAccountLoading, setIsAccountLoading] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [orderMessage, setOrderMessage] = useState("");
@@ -100,8 +115,48 @@ function App() {
   const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   useEffect(() => {
+    const loader = document.querySelector(".initial-loader");
+    if (!loader) {
+      setSiteReady(true);
+      return undefined;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      loader.classList.add("is-ready");
+      window.setTimeout(() => {
+        setSiteReady(true);
+        loader.remove();
+      }, 820);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
     document.documentElement.style.setProperty("--motion-scale", `${cosmeticMotion / 65}`);
   }, [cosmeticMotion]);
+
+  useEffect(() => {
+    if (!siteReady) return undefined;
+    const revealables = document.querySelectorAll(".section, .value-strip, .locations-section, .newsletter, .product-card, .location-card");
+    if (!revealables.length) return undefined;
+    revealables.forEach((element, index) => {
+      element.classList.add("scroll-reveal");
+      element.style.setProperty("--reveal-delay", `${Math.min(index % 5, 4) * 70}ms`);
+    });
+    if (!("IntersectionObserver" in window)) {
+      revealables.forEach((element) => element.classList.add("is-revealed"));
+      return undefined;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("is-revealed");
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12, rootMargin: "0px 0px -8%" });
+    revealables.forEach((element) => observer.observe(element));
+    return () => observer.disconnect();
+  }, [siteReady]);
 
   useEffect(() => {
     window.localStorage.setItem("valcare-language", language);
@@ -126,6 +181,7 @@ function App() {
       setUserName(displayName.trim().split(/\s+/)[0] || "");
       if (!user) {
         setIsAdmin(false);
+        setIsAccountLoading(false);
         return;
       }
       const token = await user.getIdTokenResult();
@@ -187,6 +243,7 @@ function App() {
           setActivePanel("cart");
         }
       }
+      setIsAccountLoading(false);
     });
   }, []);
 
@@ -336,9 +393,20 @@ function App() {
     }
   };
 
+  const handleLoadingAction = async (key, action) => {
+    if (loadingAction) return;
+    setLoadingAction(key);
+    try {
+      await action();
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
   const openAdminReport = async () => {
     if (!isAdmin || !window.valCareDb || isLoadingReport) return;
     setIsLoadingReport(true);
+    setLoadingAction("report");
     setActivePanel("report");
     try {
       const snapshot = await window.valCareDb.collection("orders").orderBy("createdAt", "desc").limit(200).get();
@@ -348,6 +416,7 @@ function App() {
       setProductMessage("Could not load the sales report.");
     } finally {
       setIsLoadingReport(false);
+      setLoadingAction(null);
     }
   };
 
@@ -367,6 +436,44 @@ function App() {
     return summary;
   }, new Map());
   const bestSellingProducts = [...salesSummary.values()].sort((left, right) => right.quantity - left.quantity || right.revenue - left.revenue);
+  const pendingOrders = adminOrders.filter((order) => String(order.status || "").toLowerCase() === "paid");
+  const deliveredOrders = adminOrders.filter((order) => String(order.status || "paid").toLowerCase() === "delivered");
+
+  const markOrderDelivered = async (orderId) => {
+    if (!isAdmin || !window.valCareDb || !orderId || deliveringOrderId) return;
+    setDeliveringOrderId(String(orderId));
+    try {
+      await window.valCareDb.collection("orders").doc(String(orderId)).update({
+        status: "delivered",
+        deliveredAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      const order = adminOrders.find((currentOrder) => String(currentOrder.id) === String(orderId));
+      let notificationSent = true;
+      if (order?.userId) {
+        try {
+          await window.valCareDb.collection("notifications").add({
+            title: "Your ValCare delivery is complete",
+            message: "Your order has been marked as delivered by the ValCare team. Thank you for trading with Val's Glam.",
+            audience: "user",
+            recipientId: order.userId,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+        } catch (notificationError) {
+          console.error("Delivery notification could not be created", notificationError);
+          notificationSent = false;
+        }
+      }
+      setAdminOrders((current) => current.map((order) => String(order.id) === String(orderId)
+        ? { ...order, status: "delivered" }
+        : order));
+      setProductMessage(notificationSent ? "Delivery recorded successfully and the customer was notified." : "Delivery recorded, but the customer notification could not be sent.");
+    } catch (error) {
+      console.error("Order delivery update failed", error);
+      setProductMessage("Could not mark this order as delivered. Please try again.");
+    } finally {
+      setDeliveringOrderId(null);
+    }
+  };
 
   const placeOrder = async () => {
     if (isAdmin || !cartItems.length || isCheckingOut) return;
@@ -581,16 +688,20 @@ function App() {
 
   const createAccount = async (event) => {
     event.preventDefault();
+    setIsAccountLoading(true);
     if (adminMode && account.email.trim().toLowerCase() !== adminBootstrapEmail) {
       setAccountMessage(`The one-time admin account must use ${adminBootstrapEmail}.`);
+      setIsAccountLoading(false);
       return;
     }
     if (!account.name.trim() || !account.email || !account.password || account.password !== account.confirm) {
       setAccountMessage("Enter your name, a valid email, and make sure both passwords match.");
+      setIsAccountLoading(false);
       return;
     }
     if (!window.valCareAuth) {
       setAccountMessage("Account creation is unavailable right now. Please try again.");
+      setIsAccountLoading(false);
       return;
     }
     try {
@@ -622,7 +733,7 @@ function App() {
       setUserName(account.name.trim().split(/\s+/)[0] || "");
       setAccount({ name: "", email: "", password: "", confirm: "" });
       setAccountMessage("");
-      setActivePanel(null);
+      window.setTimeout(() => setActivePanel(null), 500);
     } catch (error) {
       const messages = {
         "auth/email-already-in-use": "An account already exists for this email.",
@@ -632,32 +743,39 @@ function App() {
         "auth/network-request-failed": "Could not reach Firebase. Check your internet connection and try again."
       };
       setAccountMessage(messages[error.code] || (adminMode ? "Account created, but the admin request could not be saved. Check your Firestore rules." : "Account creation failed. Check your Firebase Authentication settings and try again."));
+      setIsAccountLoading(false);
     }
   };
 
   const login = async (event) => {
     event.preventDefault();
+    setIsAccountLoading(true);
     if (!window.valCareAuth) {
       setAccountMessage("Sign in is unavailable right now. Please try again.");
+      setIsAccountLoading(false);
       return;
     }
     try {
       await window.valCareAuth.signInWithEmailAndPassword(account.email, account.password);
       setAccount({ name: "", email: "", password: "", confirm: "" });
       setAccountMessage("");
-      setActivePanel(null);
+      window.setTimeout(() => setActivePanel(null), 500);
     } catch (error) {
       setAccountMessage("Email or password is incorrect. Please try again.");
+      setIsAccountLoading(false);
     }
   };
 
   const signInWithProvider = async (providerName) => {
+    setIsAccountLoading(true);
     if (window.location.protocol === "file:") {
       setAccountMessage("Social sign-in requires a web address. Open http://localhost:5500/ instead of opening index.html directly.");
+      setIsAccountLoading(false);
       return;
     }
     if (!window.valCareAuth) {
       setAccountMessage(`${providerName} sign-in is unavailable right now. Please try again.`);
+      setIsAccountLoading(false);
       return;
     }
     try {
@@ -667,7 +785,7 @@ function App() {
       const provider = providers[providerName]();
       await window.valCareAuth.signInWithPopup(provider);
       setAccountMessage("");
-      setActivePanel(null);
+      window.setTimeout(() => setActivePanel(null), 500);
     } catch (error) {
       const messages = {
         "auth/popup-closed-by-user": `${providerName} sign-in was cancelled.`,
@@ -679,6 +797,7 @@ function App() {
         "auth/invalid-provider-id": "Instagram requires a configured Firebase OIDC provider before it can be used."
       };
       setAccountMessage(messages[error.code] || `${providerName} sign-in failed. Check that the provider is enabled in Firebase and try again.`);
+      setIsAccountLoading(false);
     }
   };
 
@@ -744,6 +863,15 @@ function App() {
     setActivePanel("notifications");
   };
 
+  const openPanelWithLoading = (panelName) => {
+    if (loadingAction) return;
+    setLoadingAction(panelName);
+    window.setTimeout(() => {
+      setActivePanel(panelName);
+      setLoadingAction(null);
+    }, 240);
+  };
+
   const confirmLogout = () => {
     setConfirmDialog({
       title: "Log out?",
@@ -789,7 +917,7 @@ function App() {
   };
 
   return (
-    <div className={`site-shell theme-${theme}`}>
+    <div className={`site-shell theme-${theme} ${siteReady ? "is-visible" : ""}`}>
       <div className="announcement">{text.announcement}</div>
       {cartMessage && <div className="cart-toast" role="status" aria-live="polite">{cartMessage}</div>}
       <header className="navbar">
@@ -798,15 +926,15 @@ function App() {
           <a href="#shop">{text.shop}</a><a href="#shop">{text.beauty}</a><a href="#shop">{text.lifestyle}</a><a href="#about">{text.story}</a><a href="#locations">{text.locate}</a>
         </nav>
         <div className={`nav-actions ${isAdmin ? "admin-nav-actions" : "client-nav-actions"}`}>
-          {userName ? <button className={`user-name ${isAdmin ? "admin-user-name" : ""}`} onClick={() => setActivePanel(isAdmin ? "inventory" : "settings")} aria-label={isAdmin ? "Open admin dashboard" : "Open account settings"} title={userName}><span className="user-avatar">{userName.charAt(0).toUpperCase()}</span><span className="user-display-name">{userName}</span></button> : <button className="login-link" onClick={() => { setAuthMode("login"); setAccountMessage(""); setActivePanel("auth"); }}>Log in</button>}
-          {!isAdmin && <button className="icon-button panel-trigger" aria-label={`View notifications${unreadNotificationCount ? `, ${unreadNotificationCount} unread` : ""}`} title="Notifications" onClick={openNotifications}><BellIcon />{unreadNotificationCount > 0 && <span className="cart-count notification-count">{unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}</span>}</button>}
-          {!isAdmin && userName && <button className="icon-button" aria-label="Open favorite products" title="Wishlist" onClick={() => setActivePanel("wishlist")}>♡<span className="cart-count">{wishlistItems.length}</span></button>}
-          <button className="icon-button settings-button" aria-label="Open settings" title="Settings" onClick={() => setActivePanel("settings")}><SettingsIcon /></button>
+          {userName ? <button className={`user-name ${isAdmin ? "admin-user-name" : ""}`} onClick={() => openPanelWithLoading(isAdmin ? "inventory" : "settings")} aria-label={isAdmin ? "Open admin dashboard" : "Open account settings"} title={userName}>{loadingAction === (isAdmin ? "inventory" : "settings") ? <LoadingSpinner label="Opening" /> : <><span className="user-avatar">{userName.charAt(0).toUpperCase()}</span><span className="user-display-name">{userName}</span></>}</button> : <button className="login-link" onClick={() => { setAuthMode("login"); setAccountMessage(""); openPanelWithLoading("auth"); }}>{loadingAction === "auth" ? <LoadingSpinner label="Opening" /> : "Log in"}</button>}
+          {!isAdmin && <button className="icon-button panel-trigger" aria-label={`View notifications${unreadNotificationCount ? `, ${unreadNotificationCount} unread` : ""}`} title="Notifications" onClick={() => { openNotifications(); setLoadingAction("notifications"); window.setTimeout(() => setLoadingAction(null), 260); }}>{loadingAction === "notifications" ? <LoadingSpinner label="" /> : <><BellIcon />{unreadNotificationCount > 0 && <span className="cart-count notification-count">{unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}</span>}</>}</button>}
+          {!isAdmin && userName && <button className="icon-button" aria-label="Open favorite products" title="Wishlist" onClick={() => openPanelWithLoading("wishlist")}>{loadingAction === "wishlist" ? <LoadingSpinner label="" /> : <>♡<span className="cart-count">{wishlistItems.length}</span></>}</button>}
+          <button className="icon-button settings-button" aria-label="Open settings" title="Settings" onClick={() => openPanelWithLoading("settings")}>{loadingAction === "settings" ? <LoadingSpinner label="" /> : <SettingsIcon />}</button>
           <div className="secondary-nav-actions">
-            {isAdmin && <button className="icon-button admin-inventory-icon" aria-label="Manage products and stock" title="Manage products" onClick={() => { resetProductForm(); setActivePanel("inventory"); }}>✦</button>}
-            {isAdmin && <button className="icon-button" aria-label="Open sales report" title="Sales report" onClick={openAdminReport}>▥</button>}
+            {isAdmin && <button className="icon-button admin-inventory-icon" aria-label="Manage products and stock" title="Manage products" onClick={() => { resetProductForm(); openPanelWithLoading("inventory"); }}>{loadingAction === "inventory" ? <LoadingSpinner label="" /> : "✦"}</button>}
+            {isAdmin && <button className="icon-button" aria-label="Open sales report" title="Sales report" onClick={() => handleLoadingAction("report", openAdminReport)}>{loadingAction === "report" ? <LoadingSpinner label="" /> : "▥"}</button>}
           </div>
-          {!isAdmin && <button className="icon-button" aria-label={`${cart} items in bag`} title="Shopping bag" onClick={() => setActivePanel("cart")}><BagIcon /><span className="cart-count">{cart}</span></button>}
+          {!isAdmin && <button className="icon-button" aria-label={`${cart} items in bag`} title="Shopping bag" onClick={() => openPanelWithLoading("cart")}>{loadingAction === "cart" ? <LoadingSpinner label="" /> : <><BagIcon /><span className="cart-count">{cart}</span></>}</button>}
         </div>
       </header>
 
@@ -871,7 +999,7 @@ function App() {
       {activePanel && <div className="panel-backdrop" onClick={closePanel}>
         <aside className={`account-panel theme-${theme}`} onClick={(event) => event.stopPropagation()}>
           <div className="panel-header"><div><p className="eyebrow">ValCare account</p><h2>{activePanel === "cart" ? text.cart : activePanel === "notifications" ? text.notifications : activePanel === "transactions" ? text.transactions : activePanel === "report" ? "Sales report" : activePanel === "reviews" ? "Product reviews" : activePanel === "inventory" ? "Manage products" : activePanel === "create-account" || (activePanel === "auth" && authMode === "create") ? "Create your account" : activePanel === "auth" ? "Log in" : text.settings}</h2></div><button className="close-button" onClick={closePanel} aria-label="Close panel">×</button></div>
-          {(activePanel === "create-account" || activePanel === "auth") && <div className="panel-content account-form"><p className="account-intro">{authMode === "create" ? "Create your account to collect your ValCare finds." : "Log in to continue shopping and manage your account."}</p><div className="social-auth-grid"><button className="social-auth-button google-auth-button" type="button" onClick={() => signInWithProvider("Google")}><ProviderLogo name="Google" />Continue with Google</button></div><div className="form-divider"><span>or use email</span></div><form onSubmit={authMode === "create" ? createAccount : login}>{authMode === "create" && <input type="text" placeholder="Your name" value={account.name} onChange={(event) => setAccount({ ...account, name: event.target.value })} required />}<input type="email" placeholder="Email address" value={account.email} onChange={(event) => setAccount({ ...account, email: event.target.value })} required /><PasswordInput placeholder="Password" value={account.password} onChange={(event) => setAccount({ ...account, password: event.target.value })} minLength="6" required />{authMode === "create" && <PasswordInput placeholder="Confirm password" value={account.confirm} onChange={(event) => setAccount({ ...account, confirm: event.target.value })} minLength="6" required />}<button className="settings-save" type="submit">{authMode === "create" ? "Create account" : "Log in"}</button>{accountMessage && <small className="password-message">{accountMessage}</small>}</form><button className="auth-switch" type="button" onClick={() => { setAuthMode(authMode === "create" ? "login" : "create"); setAdminMode(false); setAccountMessage(""); }}>{authMode === "create" ? "Already have an account? Log in" : "New to ValCare? Create an account"}</button></div>}
+          {(activePanel === "create-account" || activePanel === "auth") && <div className="panel-content account-form">{isAccountLoading && <div className="account-loading-state"><LoadingSpinner label="Preparing your account" /><span>Finishing your ValCare experience...</span></div>}<p className="account-intro">{authMode === "create" ? "Create your account to collect your ValCare finds." : "Log in to continue shopping and manage your account."}</p><div className="social-auth-grid"><button className="social-auth-button google-auth-button" type="button" onClick={() => signInWithProvider("Google")} disabled={isAccountLoading}><ProviderLogo name="Google" />Continue with Google</button></div><div className="form-divider"><span>or use email</span></div><form onSubmit={authMode === "create" ? createAccount : login}>{authMode === "create" && <input type="text" placeholder="Your name" value={account.name} onChange={(event) => setAccount({ ...account, name: event.target.value })} required />}<input type="email" placeholder="Email address" value={account.email} onChange={(event) => setAccount({ ...account, email: event.target.value })} required /><PasswordInput placeholder="Password" value={account.password} onChange={(event) => setAccount({ ...account, password: event.target.value })} minLength="6" required />{authMode === "create" && <PasswordInput placeholder="Confirm password" value={account.confirm} onChange={(event) => setAccount({ ...account, confirm: event.target.value })} minLength="6" required />}<button className="settings-save" type="submit" disabled={isAccountLoading}>{isAccountLoading ? <LoadingSpinner label="Loading" /> : authMode === "create" ? "Create account" : "Log in"}</button>{accountMessage && <small className="password-message">{accountMessage}</small>}</form><button className="auth-switch" type="button" disabled={isAccountLoading} onClick={() => { setAuthMode(authMode === "create" ? "login" : "create"); setAdminMode(false); setAccountMessage(""); }}>{authMode === "create" ? "Already have an account? Log in" : "New to ValCare? Create an account"}</button></div>}
           {activePanel === "wishlist" && !isAdmin && <div className="panel-content"><div className="wishlist-list">{wishlistItems.length ? wishlistItems.map((product) => <article className="wishlist-item" key={product.id}><span className={`cart-thumb ${product.tone}`}>{product.icon}</span><div><strong>{product.name}</strong><span>{formatPrice(product.price)}</span></div><button className="add-button" type="button" onClick={() => addToBag(product)}>Add to bag</button><button className="remove-item" type="button" onClick={() => toggleFavorite(product)} aria-label={`Remove ${product.name} from favorites`}>×</button></article>) : <div className="panel-empty"><p>Your favorite products will appear here.</p></div>}</div></div>}
           {activePanel === "cart" && !isAdmin && <div className="panel-content">
             {orderPlaced && <div className="success-message">Order received. We’ll be in touch shortly.</div>}
@@ -882,7 +1010,7 @@ function App() {
           </div>}
           {activePanel === "notifications" && <div className="panel-content notification-list">{notifications.length ? notifications.map((notification) => <div className="notice-item" key={notification.id}><span className="notice-mark">✦</span><div><strong>{notification.title}</strong><p>{notification.message}</p><small>{notification.createdAt?.toDate?.().toLocaleDateString?.() || "Just now"}</small></div></div>) : <div className="panel-empty"><p>No new shop updates yet.</p></div>}</div>}
           {activePanel === "transactions" && <div className="panel-content"><div className="transaction-card"><div><strong>VC-1042</strong><span>Aug 28, 2026 · 2 items</span></div><strong>{formatPrice(34)}</strong><em>Delivered</em></div><div className="transaction-card"><div><strong>VC-0987</strong><span>Jul 14, 2026 · 1 item</span></div><strong>{formatPrice(18)}</strong><em>Delivered</em></div><div className="panel-empty"><p>Your purchases will appear here after checkout.</p></div></div>}
-          {activePanel === "report" && isAdmin && <div className="panel-content report-panel">{isLoadingReport ? <p className="panel-empty">Loading sales report...</p> : <><section className="report-section"><h3>Best-selling products</h3>{bestSellingProducts.length ? bestSellingProducts.slice(0, 10).map((product) => <div className="report-row" key={product.name}><span><strong>{product.name}</strong><small>{product.quantity} sold</small></span><strong>{formatPrice(product.revenue)}</strong></div>) : <p className="panel-empty">No completed transactions yet.</p>}</section><section className="report-section"><h3>Customer transactions</h3>{adminOrders.length ? adminOrders.map((order) => <div className="report-order" key={order.id}><div><strong>{order.customerName || order.customerEmail || "Customer"}</strong><small>{order.customerEmail || ""}</small><small>{order.items?.length || 0} item(s) · {order.status || "paid"}</small></div><strong>{formatPrice(order.total || 0)}</strong></div>) : <p className="panel-empty">No transactions yet.</p>}</section></>}</div>}
+          {activePanel === "report" && isAdmin && <div className="panel-content report-panel">{isLoadingReport ? <p className="panel-empty">Loading sales report...</p> : <><div className="report-toggle"><button className={`report-tab pending ${reportView === "pending" ? "active" : ""}`} type="button" onClick={() => setReportView("pending")}>Pending delivery</button><button className={`report-tab delivered ${reportView === "delivered" ? "active" : ""}`} type="button" onClick={() => setReportView("delivered")}>Delivered</button></div>{productMessage && <small className="password-message">{productMessage}</small>}<section className="report-section"><h3>{reportView === "pending" ? "Awaiting delivery" : "Delivered orders"}</h3>{(reportView === "pending" ? pendingOrders : deliveredOrders).length ? (reportView === "pending" ? pendingOrders : deliveredOrders).map((order) => <div className="report-order" key={order.id}><div className="report-buyer-details"><button className="report-buyer" type="button" onClick={() => setSelectedOrderId(selectedOrderId === order.id ? null : order.id)}><strong>{order.customerName || order.customerEmail || "Customer"}</strong><small>{order.customerEmail || ""}</small><small>{order.items?.length || 0} item(s) · {order.status || "paid"}</small></button>{selectedOrderId === order.id && <div className="report-item-list">{order.items?.length ? order.items.map((item, itemIndex) => <div className="report-item" key={`${order.id}-${item.id || item.name}-${itemIndex}`}><span>{item.name || "Item"} × {item.quantity || 1}</span><strong>{formatPrice((Number(item.price) || 0) * (item.quantity || 1))}</strong></div>) : <small>No item details recorded.</small>}</div>}</div><div className="report-order-actions"><strong>{formatPrice(order.total || 0)}</strong>{reportView === "pending" ? <button className="report-delivered-button" type="button" onClick={() => markOrderDelivered(order.id)}>Mark delivered</button> : <span className="report-status-tag">Delivered</span>}</div></div>) : <p className="panel-empty">{reportView === "pending" ? "No successful payments are waiting for delivery." : "No delivered orders yet."}</p>}</section><section className="report-section"><h3>Best-selling products</h3>{bestSellingProducts.length ? bestSellingProducts.slice(0, 10).map((product) => <div className="report-row" key={product.name}><span><strong>{product.name}</strong><small>{product.quantity} sold</small></span><strong>{formatPrice(product.revenue)}</strong></div>) : <p className="panel-empty">No completed transactions yet.</p>}</section></>}</div>}
           {activePanel === "reviews" && selectedProduct && <div className="panel-content reviews-panel"><div className="reviews-product"><span className={`cart-thumb ${selectedProduct.tone}`}>{selectedProduct.icon}</span><div><strong>{selectedProduct.name}</strong><span>{formatPrice(selectedProduct.price)}</span></div></div><div className="review-list">{reviews.length ? reviews.map((review) => <article className="review-item" key={review.id}><div className="review-meta"><strong>{review.userName}</strong><span>{"★".repeat(review.rating)}{"☆".repeat(5 - review.rating)}</span></div><p>{review.comment}</p></article>) : <p className="review-empty">No reviews yet. Be the first to share your thoughts.</p>}</div><form className="review-form" onSubmit={submitReview}><label htmlFor="review-rating">Your rating</label><select id="review-rating" value={reviewRating} onChange={(event) => setReviewRating(event.target.value)}><option value="5">★★★★★</option><option value="4">★★★★☆</option><option value="3">★★★☆☆</option><option value="2">★★☆☆☆</option><option value="1">★☆☆☆☆</option></select><textarea value={reviewText} onChange={(event) => setReviewText(event.target.value)} placeholder="Share your thoughts" maxLength="500" required /><button className="settings-save" type="submit" disabled={isSubmittingReview}>{isSubmittingReview ? "Saving review..." : "Add review"}</button>{reviewMessage && <small className="password-message">{reviewMessage}</small>}</form></div>}
           {activePanel === "settings" && <div className="panel-content settings-list">
             <div className="setting-control"><label htmlFor="currency">{text.currency}</label><select id="currency" value={currency} onChange={(event) => setCurrency(event.target.value)}>{Object.keys(currencies).map((code) => <option key={code} value={code}>{code} ({currencies[code].symbol})</option>)}</select></div>
@@ -899,14 +1027,14 @@ function App() {
         {activePanel === "inventory" && isAdmin && productForm.id && <button className="settings-link" type="button" onClick={() => confirmDeleteProduct(products.find((product) => String(product.id) === String(productForm.id)))}>Delete selected product</button>}
         </aside>
       </div>}
-      {confirmDialog && <div className="confirm-backdrop" role="presentation" onClick={() => setConfirmDialog(null)}>
+      {confirmDialog && ReactDOM.createPortal(<div className="confirm-backdrop" role="presentation" onClick={() => setConfirmDialog(null)}>
         <div className="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-message" onClick={(event) => event.stopPropagation()}>
           <p className="eyebrow">Please confirm</p>
           <h2 id="confirm-dialog-title">{confirmDialog.title}</h2>
           <p id="confirm-dialog-message">{confirmDialog.message}</p>
           <div className="confirm-actions"><button className="confirm-cancel" type="button" onClick={() => setConfirmDialog(null)}>Cancel</button><button className="confirm-submit" type="button" onClick={() => { const action = confirmDialog.onConfirm; setConfirmDialog(null); action(); }}>{confirmDialog.confirmLabel}</button></div>
         </div>
-      </div>}
+      </div>, document.body)}
     </div>
   );
 }

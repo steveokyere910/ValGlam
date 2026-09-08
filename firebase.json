@@ -15,6 +15,7 @@
       ".firebaserc",
       "firestore.rules",
       "set-admin.mjs",
+      ".firebase/**",
       "**/.*",
       "**/node_modules/**"
     ],
