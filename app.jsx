@@ -14,6 +14,11 @@ const defaultProducts = [
 const categories = ["All pieces", "Beauty", "Accessories", "Home", "Lifestyle"];
 const adminBootstrapEmail = "steveokyere910@gmail.com";
 const currencies = { GHS: { symbol: "GH₵", rate: 1 }, USD: { symbol: "$", rate: 0.078 }, GBP: { symbol: "£", rate: 0.061 } };
+const welcomeSteps = [
+  { image: "image.png", eyebrow: "Start with a little browse", title: "Find something lovely", text: "Explore beauty, accessories, home, and lifestyle pieces made for your everyday." },
+  { image: "settings.png", eyebrow: "Make it yours", title: "Shape your experience", text: "Use Settings to choose your language, currency, theme, and notification preferences." },
+  { image: "cart.png", eyebrow: "Ready when you are", title: "Add it to your bag", text: "Save favorites for later, add pieces to your bag, and check out securely when you are ready." }
+];
 const translations = {
   en: { settings: "Settings", cart: "Your cart", notifications: "Notifications", transactions: "Transactions", language: "Language", currency: "Currency", theme: "Theme", password: "Change password", save: "Save password", light: "Light", dark: "Dark", system: "System", orderUpdates: "Order updates", offers: "Offers and new drops", viewTransactions: "View transactions", shop: "Shop all", beauty: "Beauty", lifestyle: "Lifestyle", story: "Our story", locate: "Locate us", announcement: "Free delivery on UCC campus.", heroEyebrow: "Small things, soft moments", heroTitle: "Little luxuries for", heroTitleEm: "lovely days.", heroText: "Thoughtful accessories and feel-good finds to make your everyday a little more beautiful.", explore: "Explore the collection", shopEdit: "Shop the", edit: "edit", viewAll: "View all pieces", search: "Search pieces", add: "Add to bag", reviews: "Reviews", newsletterTitle: "A little note from us", newsletterText: "New drops, sweet offers, and good things in your inbox.", join: "Join us", email: "Your email address", cartEmpty: "Your cart is waiting for something lovely.", continueShopping: "Continue shopping", pay: "Pay securely with Paystack" },
   tw: { settings: "Nhyehyɛe", cart: "Wo cart", notifications: "Amanneɛbɔ", transactions: "Nkitahodi", language: "Kasa", currency: "Sika", theme: "Ɛkwan", password: "Sesa password", save: "Sie password", light: "Kanea", dark: "Sum", system: "System", orderUpdates: "Order nsɛm foforo", offers: "Nneɛma foforo ne offers", viewTransactions: "Hwɛ nkitahodi", shop: "Tɔ nneɛma nyinaa", beauty: "Beauty", lifestyle: "Asetra", story: "Yɛn ho asɛm", locate: "Hwehwɛ yɛn", announcement: "Yɛde ma kwa wɔ UCC campus.", heroEyebrow: "Nneɛma nketewa, anigye mmere", heroTitle: "Nneɛma fɛfɛ ma", heroTitleEm: "nna a ɛyɛ anigye.", heroText: "Nneɛma fɛfɛ a ɛbɛma wo da biara ayɛ yie.", explore: "Hwɛ nneɛma no", shopEdit: "Tɔ", edit: "nneɛma", viewAll: "Hwɛ nneɛma nyinaa", search: "Hwehwɛ nneɛma", add: "Fa kɔ cart", reviews: "Nsusuwii", newsletterTitle: "Asɛm ketewa bi fi yɛn nkyɛn", newsletterText: "Nneɛma foforo ne offers wɔ wo inbox mu.", join: "Ka yɛn ho", email: "Wo email", cartEmpty: "Wo cart retwɛn biribi fɛfɛ.", continueShopping: "Kɔ so tɔ", pay: "Tua denam Paystack so" },
@@ -68,6 +73,7 @@ function App() {
   const [cartItems, setCartItems] = useState([]);
   const [siteReady, setSiteReady] = useState(false);
   const [showWelcomeAnimation, setShowWelcomeAnimation] = useState(false);
+  const [welcomeStep, setWelcomeStep] = useState(0);
   const cartOwnerUid = useRef(null);
   const cartHydrated = useRef(false);
   const handledPushNotificationIds = useRef(new Set());
@@ -874,8 +880,8 @@ function App() {
       setAccountMessage("");
       setActivePanel(null);
       setIsAccountLoading(false);
+      setWelcomeStep(0);
       setShowWelcomeAnimation(true);
-      window.setTimeout(() => setShowWelcomeAnimation(false), 2800);
     } catch (error) {
       const messages = {
         "auth/email-already-in-use": "An account already exists for this email.",
@@ -1153,7 +1159,7 @@ function App() {
   return (
     <div className={`site-shell theme-${theme} ${siteReady ? "is-visible" : ""}`}>
       {isLanguageLoading && <div className="language-loading" role="status" aria-live="polite"><LoadingSpinner label="Loading language" /></div>}
-      {showWelcomeAnimation && <div className="welcome-animation" role="status" aria-live="polite"><div className="welcome-animation-card"><img src="vals.jpg" alt="Val's Glam Shop" /><div className="welcome-sparkles" aria-hidden="true"><span>✦</span><span>✧</span><span>✦</span></div><p className="eyebrow">A little welcome</p><h2>Thank you for joining</h2><strong>Val's Glam Shop</strong><p>Lovely things are waiting for you.</p></div></div>}
+      {showWelcomeAnimation && <div className="welcome-animation" role="dialog" aria-modal="true" aria-labelledby="welcome-step-title"><div className="welcome-animation-card"><button className="welcome-skip" type="button" onClick={() => setShowWelcomeAnimation(false)}>Skip</button><div className="welcome-sparkles" aria-hidden="true"><span>✦</span><span>✧</span><span>✦</span></div><div className="welcome-step-image"><img src={welcomeSteps[welcomeStep].image} alt="" /></div><p className="eyebrow">{welcomeSteps[welcomeStep].eyebrow}</p><h2 id="welcome-step-title">{welcomeSteps[welcomeStep].title}</h2><p className="welcome-step-text">{welcomeSteps[welcomeStep].text}</p><div className="welcome-step-dots" aria-label={`Step ${welcomeStep + 1} of ${welcomeSteps.length}`}>{welcomeSteps.map((step, index) => <span key={step.title} className={index === welcomeStep ? "active" : ""} />)}</div><div className="welcome-step-actions">{welcomeStep > 0 && <button className="welcome-back" type="button" onClick={() => setWelcomeStep((step) => step - 1)}>Back</button>}{welcomeStep < welcomeSteps.length - 1 ? <button className="settings-save" type="button" onClick={() => setWelcomeStep((step) => step + 1)}>Next</button> : <button className="settings-save" type="button" onClick={() => setShowWelcomeAnimation(false)}>Start exploring</button>}</div></div></div>}
       <div className="announcement">{text.announcement}</div>
       {cartMessage && <div className="cart-toast" role="status" aria-live="polite">{cartMessage}</div>}
       <header className="navbar">
