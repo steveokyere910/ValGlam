@@ -45,7 +45,7 @@ async function getCart(data) {
     if (!product || !Number.isFinite(Number(product.price)) || Number(product.price) < 0) {
       throw new HttpsError("failed-precondition", "A product in your cart is unavailable.");
     }
-    if (Number(product.stock) === 0) throw new HttpsError("failed-precondition", `${product.name} is sold out.`);
+    if (Number(product.stock) <= 0) throw new HttpsError("failed-precondition", `${product.name} is sold out.`);
     return { id: product.id, name: product.name, category: product.category, price: Number(product.price) };
   });
   const subtotal = items.reduce((total, item) => total + item.price, 0);
