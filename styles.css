@@ -428,7 +428,7 @@ footer { background: #d8b34a; border-top: 0; color: #392719; font-size: 11px; pa
 @media (max-width: 360px) {
   .navbar { align-items: center; gap: 6px; }
   .logo { min-width: 0; }
-  .nav-actions { flex: 1 1 auto; justify-content: flex-end; min-width: 0; }
+  .nav-actions { flex: 1 0 100%; justify-content: flex-start; min-width: 0; overflow-x: auto; }
   .user-name { max-width: 96px; }
   .user-identity { max-width: 64px; }
   .user-identity small { display: none; }
