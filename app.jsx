@@ -776,20 +776,28 @@ function App() {
       await window.valCareDb.collection("products").doc(String(productId)).set(product, { merge: true });
       const isRestock = previousProduct && stock > Number(previousProduct.stock || 0);
       const reachedLowStock = stock === 1 && (!previousProduct || Number(previousProduct.stock || 0) !== 1);
+      let notificationSent = false;
       if (reachedLowStock || !previousProduct || isRestock) {
-        await window.valCareDb.collection("notifications").add({
-          title: reachedLowStock ? "Low stock alert" : previousProduct ? "Back in stock" : "New product",
-          message: reachedLowStock ? `Only 1 ${product.name} is left in stock.` : previousProduct ? `${product.name} has been restocked.` : `${product.name} is now available in the shop.`,
-          audience: "all",
-          recipientId: "",
-          createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
+        try {
+          await window.valCareDb.collection("notifications").add({
+            title: reachedLowStock ? "Low stock alert" : previousProduct ? "Back in stock" : "New product",
+            message: reachedLowStock ? `Only 1 ${product.name} is left in stock.` : previousProduct ? `${product.name} has been restocked.` : `${product.name} is now available in the shop.`,
+            audience: "all",
+            recipientId: "",
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+          notificationSent = true;
+        } catch (notificationError) {
+          console.error("Product notification could not be created", notificationError);
+        }
       }
       setProducts((current) => productForm.id
         ? current.map((item) => String(item.id) === String(productId) ? { ...item, ...product } : item)
         : [...current, product]);
-      setProductMessage(productForm.id ? "Product updated." : "Product added to the shop.");
       resetProductForm();
+      setProductMessage(productForm.id
+        ? notificationSent ? "Product updated and clients alerted." : "Product updated."
+        : notificationSent ? "Product added and clients alerted." : "Product added, but clients could not be alerted.");
     } catch (error) {
       console.error("Product save failed", error);
       const code = String(error.code || "").replace("firestore/", "");
