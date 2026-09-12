@@ -803,20 +803,58 @@ function App() {
     }
   };
 
+  const compressProductImage = (file, maxWidth = 1800, quality = 0.82) => new Promise((resolve, reject) => {
+    const imageUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxWidth / Math.max(img.width, img.height));
+      const width = Math.max(1, Math.round(img.width * scale));
+      const height = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      if (!context) {
+        URL.revokeObjectURL(imageUrl);
+        reject(new Error("The browser could not prepare the image for upload."));
+        return;
+      }
+      context.drawImage(img, 0, 0, width, height);
+      canvas.toBlob((blob) => {
+        URL.revokeObjectURL(imageUrl);
+        if (!blob) {
+          reject(new Error("The browser could not compress the image."));
+          return;
+        }
+        resolve(blob);
+      }, "image/jpeg", quality);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(imageUrl);
+      reject(new Error("The selected image could not be read."));
+    };
+    img.src = imageUrl;
+  });
+
   const uploadProductImage = async (event) => {
     const file = event.target.files?.[0];
     const user = window.valCareAuth?.currentUser;
     if (!file) return;
-    if (!user || !isAdmin || !window.valCareStorage) {
+    if (!user || !isAdmin) {
       setProductMessage("Image upload is unavailable. Check your admin access and try again.");
+      return;
+    }
+    if (!window.valCareCloudinaryCloudName || !window.valCareCloudinaryApiKey || !window.valCareCloudinaryUploadPreset) {
+      setProductMessage("Image upload is not configured yet. Add the Cloudinary cloud name and upload preset.");
       return;
     }
     const fileExtension = file.name.split(".").pop()?.toLowerCase();
     const fileType = file.type.toLowerCase();
     const isHeicFile = ["heic", "heif"].includes(fileExtension) || ["image/heic", "image/heif", "image/heic-sequence", "image/heif-sequence"].includes(fileType);
     const isImageFile = fileType.startsWith("image/") || ["jpg", "jpeg", "png", "webp", "gif", "heic", "heif"].includes(fileExtension);
-    if (!isImageFile || (!isHeicFile && file.size > 5 * 1024 * 1024) || (isHeicFile && file.size > 20 * 1024 * 1024)) {
-      setProductMessage("Choose a JPG, PNG, WEBP, GIF, HEIC, or HEIF image. The converted image must be smaller than 5 MB.");
+    const maxUploadSize = 15 * 1024 * 1024;
+    if (!isImageFile || (!isHeicFile && file.size > maxUploadSize) || (isHeicFile && file.size > 20 * 1024 * 1024)) {
+      setProductMessage("Choose a JPG, PNG, WEBP, GIF, HEIC, or HEIF image. The image can be up to 15 MB after compression.");
       event.target.value = "";
       return;
     }
@@ -833,23 +871,29 @@ function App() {
         uploadFile = Array.isArray(converted) ? converted[0] : converted;
         contentType = "image/jpeg";
       }
-      if (uploadFile.size > 5 * 1024 * 1024) {
-        throw new Error("The converted image is larger than 5 MB.");
+      if (uploadFile.size > maxUploadSize) {
+        uploadFile = await compressProductImage(uploadFile);
+        contentType = "image/jpeg";
       }
       const originalName = isHeicFile ? file.name.replace(/\.[^.]+$/, ".jpg") : file.name;
-      const safeName = originalName.replace(/[^a-z0-9._-]/gi, "-");
-      const path = `productImages/${user.uid}/${Date.now()}-${safeName}`;
-      const snapshot = await window.valCareStorage.ref(path).put(uploadFile, { contentType });
-      const imageUrl = await snapshot.ref.getDownloadURL();
+      const cloudinaryEndpoint = `https://api.cloudinary.com/v1_1/${encodeURIComponent(window.valCareCloudinaryCloudName)}/image/upload`;
+      const uploadData = new FormData();
+      uploadData.append("file", uploadFile, originalName.replace(/[^a-z0-9._-]/gi, "-"));
+      uploadData.append("api_key", window.valCareCloudinaryApiKey);
+      uploadData.append("upload_preset", window.valCareCloudinaryUploadPreset);
+      const response = await fetch(cloudinaryEndpoint, { method: "POST", body: uploadData });
+      const result = await response.json();
+      if (!response.ok || !result.secure_url) throw new Error(result.error?.message || "Cloudinary upload failed.");
+      const imageUrl = result.secure_url;
       setProductForm((current) => ({ ...current, imageUrl }));
       setProductMessage("Image uploaded. Save the product to apply it.");
     } catch (error) {
       console.error("Product image upload failed", error);
-      setProductMessage(error.message === "The converted image is larger than 5 MB."
-        ? "The converted image is larger than 5 MB. Choose a smaller picture."
+      setProductMessage(error.message === "The converted image is larger than 5 MB." || error.message === "The browser could not compress the image."
+        ? "The image is too large for the shop. Choose a smaller picture or a different file."
         : isHeicFile
           ? "This HEIC/HEIF image could not be converted. Choose a JPG or PNG picture instead."
-          : "Image upload failed. Check Storage access and try again.");
+          : error.message || "Image upload failed. Check the Cloudinary settings and try again.");
     } finally {
       setIsUploadingImage(false);
       event.target.value = "";
@@ -1226,7 +1270,9 @@ function App() {
           <div className="section-heading"><h2>{text.shopEdit} <em>{text.edit}</em></h2><a className="view-all" href="#shop">{text.viewAll} ↗</a></div>
           <input id="product-search" className="product-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={text.search} aria-label={text.search} />
           <div className="category-row" role="tablist" aria-label="Product categories">
-            {categories.map((category) => <button key={category} className={`category ${activeCategory === category ? "active" : ""}`} onClick={() => setActiveCategory(category)}>{categoryLabels[category]}</button>)}
+            {categories.map((category) => (
+              <button key={category} type="button" role="tab" aria-selected={activeCategory === category} className={`category ${activeCategory === category ? "active" : ""}`} onClick={() => setActiveCategory(category)}>{categoryLabels[category]}</button>
+            ))}
           </div>
           <div className="product-grid">
             {filteredProducts.map((product) => (
@@ -1248,8 +1294,8 @@ function App() {
         <section className="locations-section" id="locations">
           <div className="section-heading"><div><p className="eyebrow">Come say hello</p><h2>Find us <em>near you</em></h2></div></div>
           <div className="location-grid">
-            <article className="location-card"><span className="location-pin">K</span><div><h3>Koforidua</h3><p>Visit ValCare in Koforidua and discover our latest little luxuries.</p><a className="location-link" href="https://maps.app.goo.gl/Abix2Rjb7RjhiGta6?g_st=ic" target="_blank" rel="noreferrer">Open in Google Maps ↗</a><iframe className="location-map" title="Koforidua map" src="https://www.google.com/maps?q=Koforidua%2C%20Ghana&output=embed" loading="lazy" referrerPolicy="no-referrer-when-downgrade" /></div></article>
-            <article className="location-card"><span className="location-pin">U</span><div><h3>UCC campus</h3><p>Find us on the University of Cape Coast campus for convenient pickup and delivery.</p><a className="location-link" href="https://maps.app.goo.gl/cce8XwQFTZmLU2ny9" target="_blank" rel="noreferrer">Open UCC map ↗</a><span className="location-note">Free delivery on UCC campus</span><iframe className="location-map" title="UCC campus map" src="https://www.google.com/maps?q=University%20of%20Cape%20Coast%2C%20Ghana&output=embed" loading="lazy" referrerPolicy="no-referrer-when-downgrade" /></div></article>
+            <article className="location-card"><span className="location-pin">K</span><div><h3>Koforidua</h3><p>Visit ValCare in Koforidua and discover our latest little luxuries.</p><a className="location-link" href="https://maps.app.goo.gl/Abix2Rjb7RjhiGta6?g_st=ic" target="_blank" rel="noopener noreferrer">Open in Google Maps ↗</a><iframe className="location-map" title="Koforidua map" src="https://www.google.com/maps?q=Koforidua%2C%20Ghana&output=embed" loading="lazy" referrerPolicy="no-referrer-when-downgrade" /></div></article>
+            <article className="location-card"><span className="location-pin">U</span><div><h3>UCC campus</h3><p>Find us on the University of Cape Coast campus for convenient pickup and delivery.</p><a className="location-link" href="https://maps.app.goo.gl/cce8XwQFTZmLU2ny9" target="_blank" rel="noopener noreferrer">Open UCC map ↗</a><span className="location-note">Free delivery on UCC campus</span><iframe className="location-map" title="UCC campus map" src="https://www.google.com/maps?q=University%20of%20Cape%20Coast%2C%20Ghana&output=embed" loading="lazy" referrerPolicy="no-referrer-when-downgrade" /></div></article>
           </div>
         </section>
         <section className="newsletter">

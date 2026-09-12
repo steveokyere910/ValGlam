@@ -1,1 +1,5 @@
 .firebase/logs/
+.firebase/hosting..cache
+.wrangler/
+worker/.wrangler/
+tmp/
