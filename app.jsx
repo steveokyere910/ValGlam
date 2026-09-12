@@ -1470,7 +1470,7 @@ function App() {
           <button className="settings-save" type="button" onClick={() => setInstallHelpOpen(false)}>Got it</button>
         </section>
       </div>, document.body)}
-      {activePanel === "report" && isAdmin && <input className="admin-order-search" type="search" value={orderSearch} onChange={(event) => setOrderSearch(event.target.value)} placeholder="Search order ID, customer, or email" aria-label="Search order ID, customer, or email" />}
+      {activePanel === "report" && isAdmin && ReactDOM.createPortal(<input className="admin-order-search" type="search" value={orderSearch} onChange={(event) => setOrderSearch(event.target.value)} placeholder="Search order ID, customer, or email" aria-label="Search order ID, customer, or email" />, document.body)}
       {activePanel && ReactDOM.createPortal(<div className="panel-backdrop" onClick={closePanel}>
         <aside className={`account-panel theme-${theme}`} onClick={(event) => event.stopPropagation()}>
           <div className="panel-header"><div><p className="eyebrow">ValCare account</p><h2>{activePanel === "cart" ? text.cart : activePanel === "notifications" ? text.notifications : activePanel === "transactions" ? text.transactions : activePanel === "report" ? "Sales report" : activePanel === "reviews" ? "Product reviews" : activePanel === "inventory" ? "Manage products" : activePanel === "create-account" || (activePanel === "auth" && authMode === "create") ? "Create your account" : activePanel === "auth" ? "Log in" : text.settings}</h2></div><button className="close-button" onClick={closePanel} aria-label="Close panel">×</button></div>
