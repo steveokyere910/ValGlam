@@ -1,3 +1,7 @@
+.order-id-copy { align-items: center; display: flex; gap: 8px; margin: 10px 0 6px; }
+.order-id-copy code { background: var(--purple-wash); border: 1px solid var(--line); color: var(--ink); font-size: 11px; font-weight: 700; letter-spacing: .04em; padding: 6px 8px; user-select: all; }
+.order-id-copy button { background: var(--deep-sage); border: 0; color: white; font-size: 10px; font-weight: 700; padding: 7px 9px; text-transform: uppercase; }
+.admin-order-search { background: var(--paper); border: 1px solid var(--line); color: var(--ink); font-size: 12px; left: auto; padding: 11px 12px; position: fixed; right: 32px; top: 235px; width: min(300px, calc(100vw - 64px)); z-index: 31; }
 :root {
   --ink: #24152c;
   --muted: #564360;

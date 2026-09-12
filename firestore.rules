@@ -123,9 +123,10 @@ service cloud.firestore {
 					|| (resource.data.audience == 'user' && resource.data.recipientId == request.auth.uid));
 			allow create: if (
 					admin()
-					&& request.resource.data.keys().hasOnly(['title', 'message', 'audience', 'recipientId', 'createdAt'])
+					&& request.resource.data.keys().hasOnly(['title', 'message', 'orderId', 'audience', 'recipientId', 'createdAt'])
 					&& request.resource.data.title is string
 					&& request.resource.data.message is string
+					&& (!request.resource.data.keys().hasAny(['orderId']) || (request.resource.data.orderId is string && request.resource.data.orderId.size() <= 120))
 					&& request.resource.data.audience in ['all', 'user']
 					&& request.resource.data.recipientId is string
 					&& ((request.resource.data.audience == 'all' && request.resource.data.recipientId == '')
@@ -133,9 +134,10 @@ service cloud.firestore {
 					&& request.resource.data.createdAt is timestamp
 				) || (
 					signedIn()
-					&& request.resource.data.keys().hasOnly(['title', 'message', 'audience', 'recipientId', 'createdAt'])
-					&& request.resource.data.title == "Thank you for joining Val's Glam Shop"
+					&& request.resource.data.keys().hasOnly(['title', 'message', 'orderId', 'audience', 'recipientId', 'createdAt'])
+					&& (request.resource.data.title == "Thank you for joining Val's Glam Shop" || (request.resource.data.title == "Thank you for your order" && request.resource.data.keys().hasAny(['orderId'])))
 					&& request.resource.data.message is string
+					&& (!request.resource.data.keys().hasAny(['orderId']) || (request.resource.data.orderId is string && request.resource.data.orderId.size() <= 120))
 					&& request.resource.data.audience == 'user'
 					&& request.resource.data.recipientId == request.auth.uid
 					&& request.resource.data.createdAt is timestamp

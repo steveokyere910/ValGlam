@@ -103,6 +103,7 @@ function App() {
   const [notifications, setNotifications] = useState([]);
   const [readNotificationIds, setReadNotificationIds] = useState([]);
   const [adminOrders, setAdminOrders] = useState([]);
+  const [orderSearch, setOrderSearch] = useState("");
   const [reportView, setReportView] = useState("pending");
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [deliveringOrderId, setDeliveringOrderId] = useState(null);
@@ -383,6 +384,18 @@ function App() {
           }
           setOrderPlaced(true);
           setActivePanel("cart");
+          try {
+            await window.valCareDb.collection("notifications").add({
+              title: "Thank you for your order",
+              message: `Your payment was confirmed. Order ID: ${result.orderId}. Keep this ID to verify your purchase or delivery status.`,
+              orderId: String(result.orderId),
+              audience: "user",
+              recipientId: user.uid,
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+          } catch (notificationError) {
+            console.error("Order notification could not be created", notificationError);
+          }
           window.trackValCareEvent?.("purchase", { transaction_id: reference });
         } catch (error) {
           setOrderMessage(error.details || "Payment could not be confirmed. Please contact us before trying again.");
@@ -624,8 +637,20 @@ function App() {
     return summary;
   }, new Map());
   const bestSellingProducts = [...salesSummary.values()].sort((left, right) => right.quantity - left.quantity || right.revenue - left.revenue);
-  const pendingOrders = adminOrders.filter((order) => String(order.status || "").toLowerCase() === "paid");
-  const deliveredOrders = adminOrders.filter((order) => String(order.status || "paid").toLowerCase() === "delivered");
+  const normalizedOrderSearch = orderSearch.trim().toLowerCase();
+  const searchedOrders = normalizedOrderSearch
+    ? adminOrders.filter((order) => [order.id, order.customerName, order.customerEmail].some((value) => String(value || "").toLowerCase().includes(normalizedOrderSearch)))
+    : adminOrders;
+  const pendingOrders = searchedOrders.filter((order) => String(order.status || "").toLowerCase() === "paid");
+  const deliveredOrders = searchedOrders.filter((order) => String(order.status || "paid").toLowerCase() === "delivered");
+  const copyOrderId = async (orderId) => {
+    try {
+      await navigator.clipboard.writeText(String(orderId));
+      setProductMessage("Order ID copied.");
+    } catch {
+      setProductMessage("Select and copy the order ID manually.");
+    }
+  };
 
   const markOrderDelivered = async (orderId) => {
     if (!isAdmin || !window.valCareDb || !orderId || deliveringOrderId) return;
@@ -1445,6 +1470,7 @@ function App() {
           <button className="settings-save" type="button" onClick={() => setInstallHelpOpen(false)}>Got it</button>
         </section>
       </div>, document.body)}
+      {activePanel === "report" && isAdmin && <input className="admin-order-search" type="search" value={orderSearch} onChange={(event) => setOrderSearch(event.target.value)} placeholder="Search order ID, customer, or email" aria-label="Search order ID, customer, or email" />}
       {activePanel && ReactDOM.createPortal(<div className="panel-backdrop" onClick={closePanel}>
         <aside className={`account-panel theme-${theme}`} onClick={(event) => event.stopPropagation()}>
           <div className="panel-header"><div><p className="eyebrow">ValCare account</p><h2>{activePanel === "cart" ? text.cart : activePanel === "notifications" ? text.notifications : activePanel === "transactions" ? text.transactions : activePanel === "report" ? "Sales report" : activePanel === "reviews" ? "Product reviews" : activePanel === "inventory" ? "Manage products" : activePanel === "create-account" || (activePanel === "auth" && authMode === "create") ? "Create your account" : activePanel === "auth" ? "Log in" : text.settings}</h2></div><button className="close-button" onClick={closePanel} aria-label="Close panel">×</button></div>
@@ -1457,7 +1483,7 @@ function App() {
             {!!cartItems.length && <><div className="cart-total"><span>Subtotal</span><strong>{formatPrice(cartTotal)}</strong></div><button className="primary-button checkout-button" onClick={placeOrder} disabled={isCheckingOut}>{isCheckingOut ? "Opening secure payment..." : "Pay securely with Paystack"}</button></>}
             {orderMessage && <small className="password-message order-message">{orderMessage}</small>}
           </div>}
-          {activePanel === "notifications" && <div className="panel-content notification-list">{notifications.length ? notifications.map((notification) => <div className="notice-item" key={notification.id}><span className="notice-mark">✦</span><div><strong>{notification.title}</strong><p>{notification.message}</p><small>{notification.createdAt?.toDate?.().toLocaleDateString?.() || "Just now"}</small></div></div>) : <div className="panel-empty"><p>No new shop updates yet.</p></div>}</div>}
+          {activePanel === "notifications" && <div className="panel-content notification-list">{notifications.length ? notifications.map((notification) => <div className="notice-item" key={notification.id}><span className="notice-mark">✦</span><div><strong>{notification.title}</strong><p>{notification.message}</p>{notification.orderId && <div className="order-id-copy"><code>{notification.orderId}</code><button type="button" onClick={() => copyOrderId(notification.orderId)}>Copy ID</button></div>}<small>{notification.createdAt?.toDate?.().toLocaleDateString?.() || "Just now"}</small></div></div>) : <div className="panel-empty"><p>No new shop updates yet.</p></div>}</div>}
           {activePanel === "transactions" && <div className="panel-content"><div className="transaction-card"><div><strong>VC-1042</strong><span>Aug 28, 2026 · 2 items</span></div><strong>{formatPrice(34)}</strong><em>Delivered</em></div><div className="transaction-card"><div><strong>VC-0987</strong><span>Jul 14, 2026 · 1 item</span></div><strong>{formatPrice(18)}</strong><em>Delivered</em></div><div className="panel-empty"><p>Your purchases will appear here after checkout.</p></div></div>}
           {activePanel === "report" && isAdmin && <div className="panel-content report-panel">{isLoadingReport ? <p className="panel-empty">Loading sales report...</p> : <><div className="report-toggle"><button className={`report-tab pending ${reportView === "pending" ? "active" : ""}`} type="button" onClick={() => setReportView("pending")}>Pending delivery</button><button className={`report-tab delivered ${reportView === "delivered" ? "active" : ""}`} type="button" onClick={() => setReportView("delivered")}>Delivered</button></div>{productMessage && <small className="password-message">{productMessage}</small>}<section className="report-section"><h3>{reportView === "pending" ? "Awaiting delivery" : "Delivered orders"}</h3>{(reportView === "pending" ? pendingOrders : deliveredOrders).length ? (reportView === "pending" ? pendingOrders : deliveredOrders).map((order) => <div className="report-order" key={order.id}><div className="report-buyer-details"><button className="report-buyer" type="button" onClick={() => setSelectedOrderId(selectedOrderId === order.id ? null : order.id)}><strong>{order.customerName || order.customerEmail || "Customer"}</strong><small>{order.customerEmail || ""}</small><small>{order.items?.length || 0} item(s) · {order.status || "paid"}</small></button>{selectedOrderId === order.id && <div className="report-item-list">{order.items?.length ? order.items.map((item, itemIndex) => <div className="report-item" key={`${order.id}-${item.id || item.name}-${itemIndex}`}><span>{item.name || "Item"} × {item.quantity || 1}</span><strong>{formatPrice((Number(item.price) || 0) * (item.quantity || 1))}</strong></div>) : <small>No item details recorded.</small>}</div>}</div><div className="report-order-actions"><strong>{formatPrice(order.total || 0)}</strong>{reportView === "pending" ? <button className="report-delivered-button" type="button" onClick={() => markOrderDelivered(order.id)}>Mark delivered</button> : <span className="report-status-tag">Delivered</span>}</div></div>) : <p className="panel-empty">{reportView === "pending" ? "No successful payments are waiting for delivery." : "No delivered orders yet."}</p>}</section><section className="report-section"><h3>Best-selling products</h3>{bestSellingProducts.length ? bestSellingProducts.slice(0, 10).map((product) => <div className="report-row" key={product.name}><span><strong>{product.name}</strong><small>{product.quantity} sold</small></span><strong>{formatPrice(product.revenue)}</strong></div>) : <p className="panel-empty">No completed transactions yet.</p>}</section></>}</div>}
           {activePanel === "reviews" && selectedProduct && <div className="panel-content reviews-panel"><div className="reviews-product"><span className={`cart-thumb ${selectedProduct.tone}`}>{selectedProduct.icon}</span><div><strong>{selectedProduct.name}</strong><span>{formatPrice(selectedProduct.price)}</span></div></div><div className="review-list">{reviews.length ? reviews.map((review) => <article className="review-item" key={review.id}><div className="review-meta"><strong>{review.userName}</strong><span>{"★".repeat(review.rating)}{"☆".repeat(5 - review.rating)}</span></div><p>{review.comment}</p></article>) : <p className="review-empty">No reviews yet. Be the first to share your thoughts.</p>}</div><form className="review-form" onSubmit={submitReview}><label htmlFor="review-rating">Your rating</label><select id="review-rating" value={reviewRating} onChange={(event) => setReviewRating(event.target.value)}><option value="5">★★★★★</option><option value="4">★★★★☆</option><option value="3">★★★☆☆</option><option value="2">★★☆☆☆</option><option value="1">★☆☆☆☆</option></select><textarea value={reviewText} onChange={(event) => setReviewText(event.target.value)} placeholder="Share your thoughts" maxLength="500" required /><button className="settings-save" type="submit" disabled={isSubmittingReview}>{isSubmittingReview ? "Saving review..." : "Add review"}</button>{reviewMessage && <small className="password-message">{reviewMessage}</small>}</form></div>}
