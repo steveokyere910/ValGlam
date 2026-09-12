@@ -936,16 +936,33 @@ function App() {
       return;
     }
     setIsUploadingVideo(true);
-    setVideoMessage("");
+    setVideoMessage("Uploading video... 0%");
     try {
-      const cloudinaryEndpoint = `https://api.cloudinary.com/v1_1/${encodeURIComponent(window.valCareCloudinaryCloudName)}/video/upload`;
+      const cloudinaryEndpoint = `https://api.cloudinary.com/v1_1/${encodeURIComponent(window.valCareCloudinaryCloudName)}/auto/upload`;
       const uploadData = new FormData();
       uploadData.append("file", file, file.name.replace(/[^a-z0-9._-]/gi, "-"));
       uploadData.append("api_key", window.valCareCloudinaryApiKey);
       uploadData.append("upload_preset", window.valCareCloudinaryUploadPreset);
-      const response = await fetch(cloudinaryEndpoint, { method: "POST", body: uploadData });
-      const result = await response.json();
-      if (!response.ok || !result.secure_url) throw new Error(result.error?.message || "Cloudinary video upload failed.");
+      const result = await new Promise((resolve, reject) => {
+        const request = new XMLHttpRequest();
+        request.open("POST", cloudinaryEndpoint);
+        request.timeout = 5 * 60 * 1000;
+        request.upload.onprogress = (progressEvent) => {
+          if (progressEvent.lengthComputable) setVideoMessage(`Uploading video... ${Math.round((progressEvent.loaded / progressEvent.total) * 100)}%`);
+        };
+        request.onload = () => {
+          let response;
+          try { response = JSON.parse(request.responseText); } catch { reject(new Error("Cloudinary returned an invalid response.")); return; }
+          if (request.status < 200 || request.status >= 300 || !response.secure_url) {
+            reject(new Error(response.error?.message || `Cloudinary upload failed (${request.status}).`));
+            return;
+          }
+          resolve(response);
+        };
+        request.onerror = () => reject(new Error("The video upload was blocked or the network connection was lost."));
+        request.ontimeout = () => reject(new Error("The video upload timed out. Try a smaller video or a faster connection."));
+        request.send(uploadData);
+      });
       setVideoForm((current) => ({ ...current, url: result.secure_url }));
       setVideoMessage("Video uploaded. Save it to publish the video on the page.");
     } catch (error) {
