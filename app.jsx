@@ -170,6 +170,11 @@ function App() {
   const [productMessage, setProductMessage] = useState("");
   const [isSavingProduct, setIsSavingProduct] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [featuredVideo, setFeaturedVideo] = useState(null);
+  const [videoForm, setVideoForm] = useState({ url: "", title: "", description: "", enabled: false });
+  const [videoMessage, setVideoMessage] = useState("");
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const [isSavingVideo, setIsSavingVideo] = useState(false);
 
   useEffect(() => {
     const loader = document.querySelector(".initial-loader");
@@ -484,6 +489,20 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (!window.valCareDb) return undefined;
+    return window.valCareDb.collection("siteContent").doc("featuredVideo").onSnapshot((snapshot) => {
+      if (!snapshot.exists) {
+        setFeaturedVideo(null);
+        setVideoForm({ url: "", title: "", description: "", enabled: false });
+        return;
+      }
+      const content = snapshot.data();
+      setFeaturedVideo(content);
+      setVideoForm({ url: content.url || "", title: content.title || "", description: content.description || "", enabled: content.enabled === true });
+    }, () => setFeaturedVideo(null));
+  }, []);
+
+  useEffect(() => {
     if (activePanel !== "reviews" || !selectedProduct || !window.valCareDb) return undefined;
     let cancelled = false;
     window.valCareDb.collection("reviews").where("productId", "==", selectedProduct.id).get().then((snapshot) => {
@@ -776,28 +795,20 @@ function App() {
       await window.valCareDb.collection("products").doc(String(productId)).set(product, { merge: true });
       const isRestock = previousProduct && stock > Number(previousProduct.stock || 0);
       const reachedLowStock = stock === 1 && (!previousProduct || Number(previousProduct.stock || 0) !== 1);
-      let notificationSent = false;
       if (reachedLowStock || !previousProduct || isRestock) {
-        try {
-          await window.valCareDb.collection("notifications").add({
-            title: reachedLowStock ? "Low stock alert" : previousProduct ? "Back in stock" : "New product",
-            message: reachedLowStock ? `Only 1 ${product.name} is left in stock.` : previousProduct ? `${product.name} has been restocked.` : `${product.name} is now available in the shop.`,
-            audience: "all",
-            recipientId: "",
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-          });
-          notificationSent = true;
-        } catch (notificationError) {
-          console.error("Product notification could not be created", notificationError);
-        }
+        await window.valCareDb.collection("notifications").add({
+          title: reachedLowStock ? "Low stock alert" : previousProduct ? "Back in stock" : "New product",
+          message: reachedLowStock ? `Only 1 ${product.name} is left in stock.` : previousProduct ? `${product.name} has been restocked.` : `${product.name} is now available in the shop.`,
+          audience: "all",
+          recipientId: "",
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
       }
       setProducts((current) => productForm.id
         ? current.map((item) => String(item.id) === String(productId) ? { ...item, ...product } : item)
         : [...current, product]);
+      setProductMessage(productForm.id ? "Product updated." : "Product added to the shop.");
       resetProductForm();
-      setProductMessage(productForm.id
-        ? notificationSent ? "Product updated and clients alerted." : "Product updated."
-        : notificationSent ? "Product added and clients alerted." : "Product added, but clients could not be alerted.");
     } catch (error) {
       console.error("Product save failed", error);
       const code = String(error.code || "").replace("firestore/", "");
@@ -905,6 +916,85 @@ function App() {
     } finally {
       setIsUploadingImage(false);
       event.target.value = "";
+    }
+  };
+
+  const uploadFeaturedVideo = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!isAdmin) {
+      setVideoMessage("Video upload is available to admins only.");
+      return;
+    }
+    if (!window.valCareCloudinaryCloudName || !window.valCareCloudinaryApiKey || !window.valCareCloudinaryUploadPreset) {
+      setVideoMessage("Video upload is not configured yet. Add the Cloudinary settings first.");
+      return;
+    }
+    if (!file.type.startsWith("video/") || file.size > 100 * 1024 * 1024) {
+      setVideoMessage("Choose an MP4, WEBM, or MOV video up to 100 MB.");
+      event.target.value = "";
+      return;
+    }
+    setIsUploadingVideo(true);
+    setVideoMessage("");
+    try {
+      const cloudinaryEndpoint = `https://api.cloudinary.com/v1_1/${encodeURIComponent(window.valCareCloudinaryCloudName)}/video/upload`;
+      const uploadData = new FormData();
+      uploadData.append("file", file, file.name.replace(/[^a-z0-9._-]/gi, "-"));
+      uploadData.append("api_key", window.valCareCloudinaryApiKey);
+      uploadData.append("upload_preset", window.valCareCloudinaryUploadPreset);
+      const response = await fetch(cloudinaryEndpoint, { method: "POST", body: uploadData });
+      const result = await response.json();
+      if (!response.ok || !result.secure_url) throw new Error(result.error?.message || "Cloudinary video upload failed.");
+      setVideoForm((current) => ({ ...current, url: result.secure_url }));
+      setVideoMessage("Video uploaded. Save it to publish the video on the page.");
+    } catch (error) {
+      console.error("Featured video upload failed", error);
+      setVideoMessage(error.message || "Video upload failed. Check the Cloudinary settings and try again.");
+    } finally {
+      setIsUploadingVideo(false);
+      event.target.value = "";
+    }
+  };
+
+  const saveFeaturedVideo = async (event) => {
+    event.preventDefault();
+    const url = videoForm.url.trim();
+    if (!isAdmin || !window.valCareDb || !url || !/^https:\/\/[^\s]+$/i.test(url)) {
+      setVideoMessage("Add a valid HTTPS video URL before saving.");
+      return;
+    }
+    setIsSavingVideo(true);
+    setVideoMessage("");
+    try {
+      await window.valCareDb.collection("siteContent").doc("featuredVideo").set({
+        url,
+        title: videoForm.title.trim(),
+        description: videoForm.description.trim(),
+        enabled: videoForm.enabled === true,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      setVideoMessage(videoForm.enabled ? "Video is now showing above Find us near you." : "Video saved and hidden from the page.");
+    } catch (error) {
+      console.error("Featured video save failed", error);
+      setVideoMessage(error.code === "permission-denied" ? "You no longer have admin access. Sign in again and try again." : "Could not save the featured video.");
+    } finally {
+      setIsSavingVideo(false);
+    }
+  };
+
+  const removeFeaturedVideo = async () => {
+    if (!isAdmin || !window.valCareDb) return;
+    setIsSavingVideo(true);
+    try {
+      await window.valCareDb.collection("siteContent").doc("featuredVideo").delete();
+      setVideoForm({ url: "", title: "", description: "", enabled: false });
+      setVideoMessage("Featured video removed from the page.");
+    } catch (error) {
+      console.error("Featured video removal failed", error);
+      setVideoMessage("Could not remove the featured video.");
+    } finally {
+      setIsSavingVideo(false);
     }
   };
 
@@ -1299,6 +1389,10 @@ function App() {
           <div className="value-item"><strong>Kind to your pocket</strong><span>Lovely little luxuries from GH₵12</span></div>
           <div className="value-item"><strong>Packaged with love</strong><span>Ready to gift, even when it’s for you</span></div>
         </section>
+        {featuredVideo?.enabled && featuredVideo.url && <section className="featured-video-section" aria-label="Featured video">
+          <div className="featured-video-heading"><div><p className="eyebrow">A little note from Val's Glam</p><h2>{featuredVideo.title || "Watch our latest update"}</h2>{featuredVideo.description && <p>{featuredVideo.description}</p>}</div></div>
+          <video className="featured-video" controls playsInline preload="metadata" src={featuredVideo.url}>Your browser does not support video playback.</video>
+        </section>}
         <section className="locations-section" id="locations">
           <div className="section-heading"><div><p className="eyebrow">Come say hello</p><h2>Find us <em>near you</em></h2></div></div>
           <div className="location-grid">
@@ -1363,6 +1457,7 @@ function App() {
           </div>}
           {activePanel === "inventory" && isAdmin && <div className="panel-content inventory-panel"><p className="account-intro">Update prices, add new items, and keep stock levels current.</p><form className="product-admin-form" onSubmit={saveProduct}><input placeholder="Product name" value={productForm.name} onChange={(event) => setProductForm({ ...productForm, name: event.target.value })} required /><div className="admin-form-row"><select value={productForm.category} onChange={(event) => setProductForm({ ...productForm, category: event.target.value })}><option>Beauty</option><option>Accessories</option><option>Home</option><option>Lifestyle</option></select><input type="number" min="0" step="0.01" placeholder="Price" value={productForm.price} onChange={(event) => setProductForm({ ...productForm, price: event.target.value })} required /><input type="number" min="0" step="1" placeholder="Stock" value={productForm.stock} onChange={(event) => setProductForm({ ...productForm, stock: event.target.value })} required /></div><div className="admin-form-row"><input placeholder="Icon emoji" value={productForm.icon} onChange={(event) => setProductForm({ ...productForm, icon: event.target.value })} /><select value={productForm.tone} onChange={(event) => setProductForm({ ...productForm, tone: event.target.value })}><option value="tone-rose">Rose</option><option value="tone-sage">Sage</option><option value="tone-yellow">Yellow</option><option value="tone-lilac">Lilac</option><option value="tone-blue">Blue</option><option value="tone-peach">Peach</option><option value="tone-pink">Pink</option><option value="tone-green">Green</option></select><input placeholder="Tag (optional)" value={productForm.tag} onChange={(event) => setProductForm({ ...productForm, tag: event.target.value })} /></div><div className="admin-form-actions"><button className="settings-save" type="submit" disabled={isSavingProduct}>{isSavingProduct ? "Saving..." : productForm.id ? "Update product" : "Add product"}</button>{productForm.id && <button className="settings-link" type="button" onClick={resetProductForm}>Cancel edit</button>}</div>{productMessage && <small className="password-message">{productMessage}</small>}</form><div className="inventory-list">{products.map((product) => <button className="inventory-item" key={product.id} type="button" onClick={() => editProduct(product)}><span className={`cart-thumb ${product.tone}`}>{product.icon}</span><span><strong>{product.name}</strong><small>{formatPrice(product.price)} · {product.stock} in stock</small></span><em>Edit</em></button>)}</div></div>}
           {activePanel === "inventory" && isAdmin && <div className="product-image-url-field"><label htmlFor="product-image-file">Choose product picture</label><input id="product-image-file" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif" onChange={uploadProductImage} disabled={isUploadingImage} /><small>{isUploadingImage ? "Uploading image..." : productForm.id ? "Choose a picture replacement from your phone gallery or camera." : "Choose a picture from your phone gallery or camera."}</small><label htmlFor="product-image-url">Image URL</label><input id="product-image-url" type="url" placeholder="https://..." value={productForm.imageUrl} onChange={(event) => setProductForm({ ...productForm, imageUrl: event.target.value })} /></div>}
+          {activePanel === "inventory" && isAdmin && <form className="featured-video-admin" onSubmit={saveFeaturedVideo}><div className="featured-video-admin-heading"><h3>Featured video</h3><p>Upload a voice-over or shop update to show above your locations.</p></div><label htmlFor="featured-video-file">Upload video</label><input id="featured-video-file" type="file" accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov" onChange={uploadFeaturedVideo} disabled={isUploadingVideo} /><small>{isUploadingVideo ? "Uploading video..." : "MP4, WEBM, or MOV up to 100 MB."}</small><label htmlFor="featured-video-url">Video URL</label><input id="featured-video-url" type="url" placeholder="https://..." value={videoForm.url} onChange={(event) => setVideoForm({ ...videoForm, url: event.target.value })} required /><input placeholder="Video title (optional)" value={videoForm.title} onChange={(event) => setVideoForm({ ...videoForm, title: event.target.value })} /><textarea placeholder="Short description (optional)" value={videoForm.description} onChange={(event) => setVideoForm({ ...videoForm, description: event.target.value })} maxLength="300" /><label className="video-visibility-toggle"><input type="checkbox" checked={videoForm.enabled} onChange={(event) => setVideoForm({ ...videoForm, enabled: event.target.checked })} /><span>Show this video above Find us near you</span></label><div className="admin-form-actions"><button className="settings-save" type="submit" disabled={isSavingVideo || isUploadingVideo}>{isSavingVideo ? "Saving video..." : "Save video"}</button>{featuredVideo?.url && <button className="settings-link" type="button" onClick={removeFeaturedVideo} disabled={isSavingVideo}>Remove video</button>}</div>{videoMessage && <small className="password-message">{videoMessage}</small>}</form>}
         {activePanel === "inventory" && isAdmin && productForm.id && <button className="settings-link" type="button" onClick={() => confirmDeleteProduct(products.find((product) => String(product.id) === String(productForm.id)))}>Delete selected product</button>}
         </aside>
       </div>, document.body)}

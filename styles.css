@@ -289,6 +289,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .location-link, .location-note { color: var(--purple-deep); font-size: 11px; font-weight: 700; letter-spacing: .06em; text-decoration: none; text-transform: uppercase; }
 .location-link:hover { color: var(--coral); }
 .location-map { border: 0; display: block; filter: saturate(.82) contrast(.96); height: 220px; margin-top: 18px; width: 100%; }
+.featured-video-section { margin: 0 auto; max-width: 1240px; padding: 76px 32px 36px; }
+.featured-video-heading { margin-bottom: 24px; }
+.featured-video-heading h2 { font-family: "Playfair Display", serif; font-size: 40px; font-weight: 500; margin: 0 0 10px; }
+.featured-video-heading p:not(.eyebrow) { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 0; max-width: 620px; }
+.featured-video { background: #17111d; border: 1px solid var(--line); display: block; max-height: 620px; object-fit: contain; width: 100%; }
 .newsletter { background: var(--deep-sage); color: white; margin-top: 20px; padding: 70px 32px; text-align: center; }
 .newsletter h2 { font-family: "Playfair Display", serif; font-size: 38px; font-weight: 500; margin: 0 0 11px; }
 .newsletter p { color: #d9e4d8; font-size: 13px; margin: 0 auto 25px; }
@@ -430,6 +435,13 @@ footer { background: #d8b34a; border-top: 0; color: #392719; font-size: 11px; pa
 .account-panel:has(.inventory-panel) .panel-header h2 { color: #8d650d; }
 .product-admin-form { display: grid; gap: 10px; }
 .product-admin-form input, .product-admin-form select { background: transparent; border: 1px solid var(--line); color: var(--ink); min-width: 0; padding: 11px; width: 100%; }
+.featured-video-admin { border-top: 1px solid var(--line); display: grid; gap: 10px; margin-top: 20px; padding-top: 20px; }
+.featured-video-admin-heading h3 { font-family: "Playfair Display", serif; font-size: 22px; font-weight: 500; margin: 0 0 5px; }
+.featured-video-admin-heading p, .featured-video-admin small { color: var(--muted); font-size: 12px; line-height: 1.5; margin: 0; }
+.featured-video-admin input, .featured-video-admin textarea { background: transparent; border: 1px solid var(--line); color: var(--ink); min-width: 0; padding: 11px; width: 100%; }
+.featured-video-admin textarea { min-height: 80px; resize: vertical; }
+.video-visibility-toggle { align-items: center; color: var(--ink); display: flex; font-size: 12px; gap: 8px; }
+.video-visibility-toggle input { width: auto; }
 .product-image-url-field { background: var(--paper); display: grid; gap: 7px; margin: 0 0 12px; order: -1; position: sticky; top: -34px; z-index: 2; }
 .product-image-url-field label { color: var(--muted); font-size: 11px; font-weight: 700; }
 .product-image-url-field input { background: transparent; border: 1px solid var(--line); color: var(--ink); padding: 11px; width: 100%; }
