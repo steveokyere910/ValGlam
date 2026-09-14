@@ -97,6 +97,24 @@ function App() {
   const cartOwnerUid = useRef(null);
   const cartHydrated = useRef(false);
   const handledPushNotificationIds = useRef(new Set());
+  const getDeviceStorageKey = (prefix) => {
+    const deviceKeyName = "valcare-device-id";
+    let deviceId = "";
+    try {
+      deviceId = window.localStorage.getItem(deviceKeyName) || "";
+    } catch {
+      deviceId = "";
+    }
+    if (!deviceId) {
+      deviceId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      try {
+        window.localStorage.setItem(deviceKeyName, deviceId);
+      } catch {
+        // Ignore storage quota and browser restrictions.
+      }
+    }
+    return `${prefix}-${deviceId}`;
+  };
   const [cartMessage, setCartMessage] = useState("");
   const [favoriteIds, setFavoriteIds] = useState([]);
   const [wishlistItems, setWishlistItems] = useState([]);
@@ -346,7 +364,7 @@ function App() {
         setCart(0);
       } else {
         try {
-          const savedCart = JSON.parse(window.localStorage.getItem(`valcare-cart-${user.uid}`) || "[]");
+          const savedCart = JSON.parse(window.localStorage.getItem(getDeviceStorageKey("valcare-cart")) || "[]");
           if (Array.isArray(savedCart)) {
             setCartItems(savedCart);
             setCart(savedCart.length);
@@ -476,8 +494,8 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!cartOwnerUid.current || !cartHydrated.current) return;
-    window.localStorage.setItem(`valcare-cart-${cartOwnerUid.current}`, JSON.stringify(cartItems));
+    if (!cartHydrated.current) return;
+    window.localStorage.setItem(getDeviceStorageKey("valcare-cart"), JSON.stringify(cartItems));
   }, [cartItems]);
 
   useEffect(() => {
@@ -502,7 +520,7 @@ function App() {
         return;
       }
       try {
-        const savedReadNotificationIds = JSON.parse(window.localStorage.getItem(`valcare-read-notifications-${user.uid}`) || "[]");
+        const savedReadNotificationIds = JSON.parse(window.localStorage.getItem(getDeviceStorageKey("valcare-read-notifications")) || "[]");
         setReadNotificationIds(Array.isArray(savedReadNotificationIds) ? savedReadNotificationIds : []);
       } catch {
         setReadNotificationIds([]);
@@ -1396,9 +1414,8 @@ function App() {
 
   const openNotifications = () => {
     const nextReadNotificationIds = notifications.map((notification) => notification.id);
-    const user = window.valCareAuth?.currentUser;
     setReadNotificationIds(nextReadNotificationIds);
-    if (user) window.localStorage.setItem(`valcare-read-notifications-${user.uid}`, JSON.stringify(nextReadNotificationIds));
+    window.localStorage.setItem(getDeviceStorageKey("valcare-read-notifications"), JSON.stringify(nextReadNotificationIds));
     setActivePanel("notifications");
   };
 
