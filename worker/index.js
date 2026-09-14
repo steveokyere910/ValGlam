@@ -28,6 +28,38 @@ function json(data, status, origin) {
   });
 }
 
+async function parseRequestJson(request) {
+  const contentType = request.headers.get("content-type") || "";
+
+  try {
+    return await request.json();
+  } catch {
+    const rawBody = await request.clone().text();
+    if (!rawBody.trim()) return {};
+
+    try {
+      return JSON.parse(rawBody);
+    } catch {
+      if (contentType.includes("application/json") || contentType.includes("+json")) {
+        throw new Error("Invalid JSON request.");
+      }
+
+      const fallback = {};
+      try {
+        const [, ...pairs] = rawBody.split("&");
+        for (const pair of pairs) {
+          const [key, value] = pair.split("=");
+          if (key) fallback[decodeURIComponent(key)] = decodeURIComponent(value || "");
+        }
+      } catch {
+        // ignore
+      }
+
+      return fallback;
+    }
+  }
+}
+
 function getCallbackUrl(value) {
   try {
     const url = new URL(String(value || ""));
@@ -91,8 +123,12 @@ export default {
     let data;
 
     try {
-      data = await request.json();
+      data = await parseRequestJson(request);
     } catch {
+      return json({ error: "Invalid JSON request." }, 400, origin);
+    }
+
+    if (!data || typeof data !== "object") {
       return json({ error: "Invalid JSON request." }, 400, origin);
     }
 
