@@ -450,30 +450,51 @@ function App() {
           if (orderSaved) {
             setCartItems([]);
             setCart(0);
+            window.localStorage.removeItem(`valcare-cart-${user.uid}`);
           }
           setOrderPlaced(true);
           setActivePanel("cart");
-          try {
-            await window.valCareDb.collection("notifications").add({
-              title: "Thank you for your order",
-              message: `Your payment was confirmed. Order ID: ${orderId}. Keep this ID to verify your purchase or delivery status.`,
-              orderId: String(orderId),
-              audience: "user",
-              recipientId: user.uid,
-              createdAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-            setNotifications((current) => [{
-              id: `order-${orderId}`,
-              title: "Thank you for your order",
-              message: `Your payment was confirmed. Order ID: ${orderId}. Keep this ID to verify your purchase or delivery status.`,
-              orderId: String(orderId),
-              audience: "user",
-              recipientId: user.uid,
-              createdAt: { toDate: () => new Date() }
-            }, ...current].slice(0, 20));
-          } catch (notificationError) {
-            console.error("Order notification could not be created", notificationError);
-            setOrderMessage(`Order saved, but the notification could not be created (${notificationError.code || "unknown-error"}).`);
+          if (orderSaved) {
+            try {
+              await window.valCareDb.collection("notifications").add({
+                title: "Thank you for your order",
+                message: `Your payment was confirmed. Order ID: ${orderId}. Keep this ID to verify your purchase or delivery status.`,
+                orderId: String(orderId),
+                audience: "user",
+                recipientId: user.uid,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+              });
+              setNotifications((current) => [{
+                id: `order-${orderId}`,
+                title: "Thank you for your order",
+                message: `Your payment was confirmed. Order ID: ${orderId}. Keep this ID to verify your purchase or delivery status.`,
+                orderId: String(orderId),
+                audience: "user",
+                recipientId: user.uid,
+                createdAt: { toDate: () => new Date() }
+              }, ...current].slice(0, 20));
+            } catch (notificationError) {
+              console.error("Order notification could not be created", notificationError);
+              setOrderMessage(`Order saved, but the notification could not be created (${notificationError.code || "unknown-error"}).`);
+            }
+          }
+          if (orderSaved) {
+            try {
+              const adminStatus = await window.valCareDb.collection("adminStatus").doc("config").get();
+              const adminUid = adminStatus.exists ? adminStatus.data()?.createdBy : "";
+              if (adminUid && adminUid !== user.uid) {
+                await window.valCareDb.collection("notifications").add({
+                  title: "New order received",
+                  message: `Order ${orderId} from ${orderDocument.customerName}. Total: ${currency} ${Number(orderDocument.total).toFixed(2)}.`,
+                  orderId: String(orderId),
+                  audience: "user",
+                  recipientId: adminUid,
+                  createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+              }
+            } catch (adminNotificationError) {
+              console.error("Admin order notification could not be created", adminNotificationError);
+            }
           }
           window.trackValCareEvent?.("purchase", { transaction_id: reference });
         } catch (error) {

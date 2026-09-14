@@ -124,7 +124,13 @@ service cloud.firestore {
 				&& request.resource.data.paymentReference.size() > 0
 				&& request.resource.data.id == orderId
 				&& request.resource.data.createdAt is timestamp
-				&& request.resource.data.keys().hasOnly(['id', 'userId', 'customerName', 'customerEmail', 'items', 'subtotal', 'total', 'currency', 'status', 'paymentReference', 'createdAt']);
+				&& request.resource.data.customerPhone is string
+				&& request.resource.data.customerPhone.size() <= 40
+				&& request.resource.data.customerLocation is string
+				&& request.resource.data.customerLocation.size() <= 200
+				&& request.resource.data.customerAddress is string
+				&& request.resource.data.customerAddress.size() <= 500
+				&& request.resource.data.keys().hasOnly(['id', 'userId', 'customerName', 'customerEmail', 'customerPhone', 'customerLocation', 'customerAddress', 'items', 'subtotal', 'total', 'currency', 'status', 'paymentReference', 'createdAt']);
 			allow read: if admin() || (signedIn() && resource.data.userId == request.auth.uid);
 			allow update: if admin()
 				&& request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'deliveredAt'])
@@ -172,6 +178,15 @@ service cloud.firestore {
 					&& (!request.resource.data.keys().hasAny(['orderId']) || (request.resource.data.orderId is string && request.resource.data.orderId.size() <= 120))
 					&& request.resource.data.audience == 'user'
 					&& request.resource.data.recipientId == request.auth.uid
+					&& request.resource.data.createdAt is timestamp
+				) || (
+					signedIn()
+					&& request.resource.data.keys().hasOnly(['title', 'message', 'orderId', 'audience', 'recipientId', 'createdAt'])
+					&& request.resource.data.title == 'New order received'
+					&& request.resource.data.message is string
+					&& request.resource.data.orderId is string
+					&& request.resource.data.audience == 'user'
+					&& request.resource.data.recipientId == get(/databases/$(database)/documents/adminStatus/config).data.createdBy
 					&& request.resource.data.createdAt is timestamp
 				);
 			allow update, delete: if admin();
