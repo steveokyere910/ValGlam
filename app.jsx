@@ -103,6 +103,8 @@ function App() {
   const [notifications, setNotifications] = useState([]);
   const [readNotificationIds, setReadNotificationIds] = useState([]);
   const [adminOrders, setAdminOrders] = useState([]);
+  const [clientOrders, setClientOrders] = useState([]);
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
   const [orderSearch, setOrderSearch] = useState("");
   const [reportView, setReportView] = useState("pending");
   const [selectedOrderId, setSelectedOrderId] = useState(null);
@@ -601,6 +603,28 @@ function App() {
     });
     return () => { cancelled = true; };
   }, [activePanel, selectedProduct]);
+
+  useEffect(() => {
+    if (activePanel !== "transactions" || !window.valCareDb) return undefined;
+    const user = window.valCareAuth?.currentUser;
+    if (!user) {
+      setClientOrders([]);
+      return undefined;
+    }
+    let cancelled = false;
+    setIsLoadingTransactions(true);
+    window.valCareDb.collection("orders").where("userId", "==", user.uid).limit(100).get().then((snapshot) => {
+      if (cancelled) return;
+      const orders = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      orders.sort((left, right) => (right.createdAt?.toMillis?.() || 0) - (left.createdAt?.toMillis?.() || 0));
+      setClientOrders(orders);
+    }).catch(() => {
+      if (!cancelled) setClientOrders([]);
+    }).finally(() => {
+      if (!cancelled) setIsLoadingTransactions(false);
+    });
+    return () => { cancelled = true; };
+  }, [activePanel, userName]);
 
   const filteredProducts = products.filter((product) => {
     const matchesCategory = activeCategory === "All pieces" || product.category === activeCategory;
@@ -1586,7 +1610,7 @@ function App() {
             {orderMessage && <small className="password-message order-message">{orderMessage}</small>}
           </div>}
           {activePanel === "notifications" && <div className="panel-content notification-list">{notifications.length ? notifications.map((notification) => <div className="notice-item" key={notification.id}><span className="notice-mark">✦</span><div><strong>{notification.title}</strong><p>{notification.message}</p>{notification.orderId && <div className="order-id-copy"><code>{notification.orderId}</code><button type="button" onClick={() => copyOrderId(notification.orderId)}>Copy ID</button></div>}<small>{notification.createdAt?.toDate?.().toLocaleDateString?.() || "Just now"}</small></div></div>) : <div className="panel-empty"><p>No new shop updates yet.</p></div>}</div>}
-          {activePanel === "transactions" && <div className="panel-content"><div className="transaction-card"><div><strong>VC-1042</strong><span>Aug 28, 2026 · 2 items</span></div><strong>{formatPrice(34)}</strong><em>Delivered</em></div><div className="transaction-card"><div><strong>VC-0987</strong><span>Jul 14, 2026 · 1 item</span></div><strong>{formatPrice(18)}</strong><em>Delivered</em></div><div className="panel-empty"><p>Your purchases will appear here after checkout.</p></div></div>}
+          {activePanel === "transactions" && <div className="panel-content">{isLoadingTransactions ? <div className="panel-empty"><LoadingSpinner label="Loading transactions" /></div> : clientOrders.length ? clientOrders.map((order) => <article className="transaction-card" key={order.id}><div><strong>{order.id}</strong><span>{order.createdAt?.toDate?.().toLocaleDateString?.() || "Recent order"} · {order.items?.length || 0} item(s)</span>{order.items?.map((item, index) => <small key={`${order.id}-${item.id || item.name}-${index}`}>{item.name || "Item"} × {item.quantity || 1} · {formatPrice((Number(item.price) || 0) * (item.quantity || 1))}</small>)}</div><strong>{formatPrice(order.total || 0)}</strong><em>{String(order.status || "paid").toUpperCase()}</em></article>) : <div className="panel-empty"><p>Your purchases will appear here after checkout.</p></div>}</div>}
           {activePanel === "report" && isAdmin && <div className="panel-content report-panel">{isLoadingReport ? <p className="panel-empty">Loading sales report...</p> : <><div className="report-toggle"><button className={`report-tab pending ${reportView === "pending" ? "active" : ""}`} type="button" onClick={() => setReportView("pending")}>Pending delivery</button><button className={`report-tab delivered ${reportView === "delivered" ? "active" : ""}`} type="button" onClick={() => setReportView("delivered")}>Delivered</button></div>{productMessage && <small className="password-message">{productMessage}</small>}<section className="report-section"><h3>{reportView === "pending" ? "Awaiting delivery" : "Delivered orders"}</h3>{(reportView === "pending" ? pendingOrders : deliveredOrders).length ? (reportView === "pending" ? pendingOrders : deliveredOrders).map((order) => <div className="report-order" key={order.id}><div className="report-buyer-details"><div className="report-buyer"><strong>Customer: {order.customerName || order.customerEmail || "Customer"}</strong><small>{order.customerEmail || ""}</small><small>Order {order.id} · {order.items?.length || 0} item(s)</small></div><div className="report-item-list">{order.items?.length ? order.items.map((item, itemIndex) => <div className="report-item" key={`${order.id}-${item.id || item.name}-${itemIndex}`}><span>{item.name || "Item"} × {item.quantity || 1}</span><strong>{formatPrice((Number(item.price) || 0) * (item.quantity || 1))}</strong></div>) : <small>No item details recorded.</small>}</div></div><div className="report-order-actions"><strong>Total {formatPrice(order.total || 0)}</strong>{reportView === "pending" ? <button className="report-delivered-button" type="button" onClick={() => markOrderDelivered(order.id)}>Mark delivered</button> : <span className="report-status-tag">Delivered</span>}</div></div>) : <p className="panel-empty">{reportView === "pending" ? "No successful payments are waiting for delivery." : "No delivered orders yet."}</p>}</section><section className="report-section"><h3>Best-selling products</h3>{bestSellingProducts.length ? bestSellingProducts.slice(0, 10).map((product) => <div className="report-row" key={product.name}><span><strong>{product.name}</strong><small>{product.quantity} sold</small></span><strong>{formatPrice(product.revenue)}</strong></div>) : <p className="panel-empty">No completed transactions yet.</p>}</section></>}</div>}
           {activePanel === "reviews" && selectedProduct && <div className="panel-content reviews-panel"><div className="reviews-product"><span className={`cart-thumb ${selectedProduct.tone}`}>{selectedProduct.icon}</span><div><strong>{selectedProduct.name}</strong><span>{formatPrice(selectedProduct.price)}</span></div></div><div className="review-list">{reviews.length ? reviews.map((review) => <article className="review-item" key={review.id}><div className="review-meta"><strong>{review.userName}</strong><span>{"★".repeat(review.rating)}{"☆".repeat(5 - review.rating)}</span></div><p>{review.comment}</p></article>) : <p className="review-empty">No reviews yet. Be the first to share your thoughts.</p>}</div><form className="review-form" onSubmit={submitReview}><label htmlFor="review-rating">Your rating</label><select id="review-rating" value={reviewRating} onChange={(event) => setReviewRating(event.target.value)}><option value="5">★★★★★</option><option value="4">★★★★☆</option><option value="3">★★★☆☆</option><option value="2">★★☆☆☆</option><option value="1">★☆☆☆☆</option></select><textarea value={reviewText} onChange={(event) => setReviewText(event.target.value)} placeholder="Share your thoughts" maxLength="500" required /><button className="settings-save" type="submit" disabled={isSubmittingReview}>{isSubmittingReview ? "Saving review..." : "Add review"}</button>{reviewMessage && <small className="password-message">{reviewMessage}</small>}</form></div>}
           {activePanel === "settings" && <div className="panel-content settings-list">
