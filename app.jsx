@@ -532,7 +532,7 @@ function App() {
     if (!window.valCareDb || !window.valCareAuth) return undefined;
     let unsubscribeBroadcastNotifications = null;
     let unsubscribePersonalNotifications = null;
-    const unsubscribeAuth = window.valCareAuth.onAuthStateChanged((user) => {
+    const unsubscribeAuth = window.valCareAuth.onAuthStateChanged(async (user) => {
       unsubscribeBroadcastNotifications?.();
       unsubscribePersonalNotifications?.();
       unsubscribeBroadcastNotifications = null;
