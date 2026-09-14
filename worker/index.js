@@ -69,7 +69,9 @@ function base64UrlEncode(value) {
 }
 
 function pemToBytes(pem) {
-  const base64 = pem.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g, "");
+  const normalized = String(pem).replace(/^"|"$/g, "").replace(/\\n/g, "\n");
+  const pemMatch = normalized.match(/-----BEGIN [^-]+-----([\s\S]*?)-----END [^-]+-----/);
+  const base64 = (pemMatch ? pemMatch[1] : normalized).replace(/[^A-Za-z0-9+/=]/g, "");
   const binary = atob(base64);
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
@@ -98,7 +100,7 @@ async function getFirestoreAccessToken(env) {
     body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${header}.${claim}.${base64UrlEncode(signature)}`
   });
   const result = await response.json();
-  if (!response.ok || !result.access_token) throw new Error("Firebase service authentication failed.");
+  if (!response.ok || !result.access_token) throw new Error(`Firebase service authentication failed: ${result.error_description || result.error || "unknown OAuth error"}.`);
   return result.access_token;
 }
 
@@ -140,7 +142,7 @@ async function createPaidOrderAndReduceStock({ reference, payment, env }) {
   const orderPath = `/orders/${encodeURIComponent(reference)}`;
   const existing = await firestoreRequest(orderPath, { method: "GET" }, env);
   if (existing.response.ok) return { status: "paid", orderId: reference };
-  if (existing.response.status !== 404) throw new Error("Could not check the existing order.");
+  if (existing.response.status !== 404) throw new Error(`Could not check the existing order (${existing.response.status}): ${existing.result.error?.message || "Firestore denied the request"}.`);
 
   const ids = Array.isArray(payment.metadata?.items) ? payment.metadata.items.map(String) : [];
   if (!ids.length) throw new Error("The payment does not contain product details.");
@@ -331,7 +333,7 @@ export default {
       } catch (error) {
         console.error("Paystack verification error:", error);
         return json(
-          { error: "Unable to verify payment." },
+          { error: error instanceof Error ? error.message : "Unable to verify payment." },
           502,
           origin
         );
