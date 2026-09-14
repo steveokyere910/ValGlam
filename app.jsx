@@ -97,24 +97,6 @@ function App() {
   const cartOwnerUid = useRef(null);
   const cartHydrated = useRef(false);
   const handledPushNotificationIds = useRef(new Set());
-  const getDeviceStorageKey = (prefix) => {
-    const deviceKeyName = "valcare-device-id";
-    let deviceId = "";
-    try {
-      deviceId = window.localStorage.getItem(deviceKeyName) || "";
-    } catch {
-      deviceId = "";
-    }
-    if (!deviceId) {
-      deviceId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-      try {
-        window.localStorage.setItem(deviceKeyName, deviceId);
-      } catch {
-        // Ignore storage quota and browser restrictions.
-      }
-    }
-    return `${prefix}-${deviceId}`;
-  };
   const [cartMessage, setCartMessage] = useState("");
   const [favoriteIds, setFavoriteIds] = useState([]);
   const [wishlistItems, setWishlistItems] = useState([]);
@@ -364,7 +346,17 @@ function App() {
         setCart(0);
       } else {
         try {
-          const savedCart = JSON.parse(window.localStorage.getItem(getDeviceStorageKey("valcare-cart")) || "[]");
+          let savedCart = [];
+          if (window.valCareDb) {
+            const profile = await window.valCareDb.collection("userProfiles").doc(user.uid).get();
+            if (profile.exists && Array.isArray(profile.data()?.cart)) {
+              savedCart = profile.data().cart;
+            }
+          }
+          if (!savedCart.length) {
+            const cachedCart = JSON.parse(window.localStorage.getItem(`valcare-cart-${user.uid}`) || "[]");
+            if (Array.isArray(cachedCart)) savedCart = cachedCart;
+          }
           if (Array.isArray(savedCart)) {
             setCartItems(savedCart);
             setCart(savedCart.length);
@@ -494,9 +486,14 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!cartHydrated.current) return;
-    window.localStorage.setItem(getDeviceStorageKey("valcare-cart"), JSON.stringify(cartItems));
-  }, [cartItems]);
+    if (!cartOwnerUid.current || !cartHydrated.current) return;
+    const user = window.valCareAuth?.currentUser;
+    if (!user || isAdmin) return;
+    window.localStorage.setItem(`valcare-cart-${user.uid}`, JSON.stringify(cartItems));
+    if (window.valCareDb) {
+      window.valCareDb.collection("userProfiles").doc(user.uid).set({ cart: cartItems }, { merge: true }).catch(() => {});
+    }
+  }, [cartItems, isAdmin]);
 
   useEffect(() => {
     if (!window.valCareDb) return undefined;
@@ -520,7 +517,17 @@ function App() {
         return;
       }
       try {
-        const savedReadNotificationIds = JSON.parse(window.localStorage.getItem(getDeviceStorageKey("valcare-read-notifications")) || "[]");
+        let savedReadNotificationIds = [];
+        if (window.valCareDb) {
+          const profile = await window.valCareDb.collection("userProfiles").doc(user.uid).get();
+          if (profile.exists && Array.isArray(profile.data()?.readNotificationIds)) {
+            savedReadNotificationIds = profile.data().readNotificationIds;
+          }
+        }
+        if (!savedReadNotificationIds.length) {
+          const cachedReadNotificationIds = JSON.parse(window.localStorage.getItem(`valcare-read-notifications-${user.uid}`) || "[]");
+          if (Array.isArray(cachedReadNotificationIds)) savedReadNotificationIds = cachedReadNotificationIds;
+        }
         setReadNotificationIds(Array.isArray(savedReadNotificationIds) ? savedReadNotificationIds : []);
       } catch {
         setReadNotificationIds([]);
@@ -1414,8 +1421,14 @@ function App() {
 
   const openNotifications = () => {
     const nextReadNotificationIds = notifications.map((notification) => notification.id);
+    const user = window.valCareAuth?.currentUser;
     setReadNotificationIds(nextReadNotificationIds);
-    window.localStorage.setItem(getDeviceStorageKey("valcare-read-notifications"), JSON.stringify(nextReadNotificationIds));
+    if (user) {
+      window.localStorage.setItem(`valcare-read-notifications-${user.uid}`, JSON.stringify(nextReadNotificationIds));
+      if (window.valCareDb) {
+        window.valCareDb.collection("userProfiles").doc(user.uid).set({ readNotificationIds: nextReadNotificationIds }, { merge: true }).catch(() => {});
+      }
+    }
     setActivePanel("notifications");
   };
 
