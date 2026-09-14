@@ -1,12 +1,12 @@
 importScripts("https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js", "https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging-compat.js");
 
 firebase.initializeApp({
-  apiKey: "AIzaSyAd7DYedZQ-_1ttp8HP_Sr9WAasiRdFuO0",
-  authDomain: "valscarea1.firebaseapp.com",
-  projectId: "valscarea1",
-  storageBucket: "valscarea1.firebasestorage.app",
-  messagingSenderId: "190919597993",
-  appId: "1:190919597993:web:8faf23022bf58a93892eb8"
+  apiKey: "AIzaSyDZbU0dmAgim2APAZaLGTlCOVM4FJAcRY0",
+  authDomain: "valsglam.firebaseapp.com",
+  projectId: "valsglam",
+  storageBucket: "valsglam.firebasestorage.app",
+  messagingSenderId: "1006792491156",
+  appId: "1:1006792491156:web:61024ee98edf810a30b481"
 });
 
 const messaging = firebase.messaging();
@@ -23,12 +23,12 @@ messaging.onBackgroundMessage((payload) => {
   self.registration.showNotification(title, options);
 });
 
-const CACHE_NAME = "valcare-v18";
+const CACHE_NAME = "valcare-v19";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./styles.css?v=24",
-  "./app.jsx?v=34",
+  "./styles.css?v=25",
+  "./app.jsx?v=39",
   "./firebase.js",
   "./manifest.webmanifest",
   "./icon-192.png",

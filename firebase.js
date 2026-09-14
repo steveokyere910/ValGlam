@@ -1,11 +1,11 @@
 const firebaseConfig = {
-  apiKey: "AIzaSyAd7DYedZQ-_1ttp8HP_Sr9WAasiRdFuO0",
-  authDomain: "valscarea1.firebaseapp.com",
-  projectId: "valscarea1",
-  storageBucket: "valscarea1.firebasestorage.app",
-  messagingSenderId: "190919597993",
-  appId: "1:190919597993:web:8faf23022bf58a93892eb8",
-  measurementId: "G-B63SXKQXSC"
+  apiKey: "AIzaSyDZbU0dmAgim2APAZaLGTlCOVM4FJAcRY0",
+  authDomain: "valsglam.firebaseapp.com",
+  projectId: "valsglam",
+  storageBucket: "valsglam.firebasestorage.app",
+  messagingSenderId: "1006792491156",
+  appId: "1:1006792491156:web:61024ee98edf810a30b481",
+  measurementId: "G-TXKMRN9B3C"
 };
 
 window.valCarePaystackPublicKey = "pk_live_7a007406a4fbe121a6733261cb39ff84ad72e0af";

@@ -1,6 +1,6 @@
 # ValCare Deployment
 
-The app uses Firebase project `valscarea1`. The frontend can be served by Firebase Hosting or GitHub Pages at `steveokyere910.github.io/ValGlam/`.
+The app uses Firebase project `valsglam`. The frontend can be served by Firebase Hosting or GitHub Pages at `steveokyere910.github.io/ValGlam/`.
 
 ## First-time setup
 
