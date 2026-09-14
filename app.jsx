@@ -115,6 +115,8 @@ function App() {
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [orderMessage, setOrderMessage] = useState("");
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [checkoutDetails, setCheckoutDetails] = useState({ phone: "", location: "", gpsAddress: "" });
+  const isCheckoutReady = Boolean(checkoutDetails.phone.trim() && checkoutDetails.location.trim() && checkoutDetails.gpsAddress.trim());
   const [preferences, setPreferences] = useState({ updates: true, offers: false });
   const [currency, setCurrency] = useState("GHS");
   const [language, setLanguage] = useState(() => ["en", "tw", "fr"].includes(window.localStorage.getItem("valcare-language")) ? window.localStorage.getItem("valcare-language") : "en");
@@ -401,11 +403,15 @@ function App() {
             pendingOrder = null;
           }
           const orderItems = Array.isArray(pendingOrder?.items) && pendingOrder.items.length ? pendingOrder.items : cartItems;
+          const pendingCheckoutDetails = pendingOrder?.checkoutDetails || checkoutDetails;
           const orderDocument = {
             id: orderId,
             userId: user.uid,
             customerName: user.displayName || user.email?.split("@")[0] || "Customer",
             customerEmail: user.email || "",
+            customerPhone: String(pendingCheckoutDetails?.phone || checkoutDetails.phone || "").trim(),
+            customerLocation: String(pendingCheckoutDetails?.location || checkoutDetails.location || "").trim(),
+            customerAddress: String(pendingCheckoutDetails?.gpsAddress || checkoutDetails.gpsAddress || "").trim(),
             items: orderItems.map((item) => ({
               id: item.id,
               name: item.name,
@@ -724,6 +730,81 @@ function App() {
     }
   };
 
+  const copyTextValue = async (label, value) => {
+    if (!value) {
+      setProductMessage(`${label} is not available for this order.`);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(String(value));
+      setProductMessage(`${label} copied.`);
+    } catch {
+      setProductMessage(`Select and copy the ${label.toLowerCase()} manually.`);
+    }
+  };
+
+  const normalizeGhanaPhoneForWhatsApp = (phoneNumber) => {
+    const digits = String(phoneNumber || "").replace(/\D/g, "");
+    if (!digits) return "";
+    let normalized = digits;
+    if (normalized.startsWith("0")) {
+      normalized = `233${normalized.slice(1)}`;
+    } else if (normalized.startsWith("+")) {
+      normalized = normalized.slice(1);
+    }
+    if (!normalized.startsWith("233") && normalized.length === 9) {
+      normalized = `233${normalized}`;
+    }
+    return normalized;
+  };
+
+  const normalizeGhanaPhoneForDial = (phoneNumber) => {
+    const digits = normalizeGhanaPhoneForWhatsApp(phoneNumber);
+    if (!digits) return "";
+    return `+${digits}`;
+  };
+
+  const openWhatsAppChat = (phoneNumber, messageText) => {
+    const normalizedNumber = normalizeGhanaPhoneForWhatsApp(phoneNumber);
+    if (!normalizedNumber) {
+      setProductMessage("No valid WhatsApp contact is saved for this order.");
+      return;
+    }
+    const target = `https://wa.me/${normalizedNumber}${messageText ? `?text=${encodeURIComponent(messageText)}` : ""}`;
+    window.open(target, "_blank", "noopener,noreferrer");
+  };
+
+  const callCustomer = (phoneNumber) => {
+    const sanitizedNumber = normalizeGhanaPhoneForDial(phoneNumber);
+    if (!sanitizedNumber) {
+      setProductMessage("No valid phone number is saved for this order.");
+      return;
+    }
+    window.location.href = `tel:${sanitizedNumber}`;
+  };
+
+  const textCustomer = (phoneNumber) => {
+    const sanitizedNumber = normalizeGhanaPhoneForDial(phoneNumber);
+    if (!sanitizedNumber) {
+      setProductMessage("No valid phone number is saved for this order.");
+      return;
+    }
+    window.location.href = `sms:${sanitizedNumber}`;
+  };
+
+  const openMapAddress = (address) => {
+    if (!address) {
+      setProductMessage("No GPS address is saved for this order.");
+      return;
+    }
+    const destination = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+    window.open(destination, "_blank", "noopener,noreferrer");
+  };
+
+  const toggleOrderDetails = (orderId) => {
+    setSelectedOrderId((current) => String(current) === String(orderId) ? null : String(orderId));
+  };
+
   const markOrderDelivered = async (orderId) => {
     if (!isAdmin || !window.valCareDb || !orderId || deliveringOrderId) return;
     setDeliveringOrderId(String(orderId));
@@ -767,6 +848,10 @@ function App() {
       setOrderMessage("Please sign in before placing an order.");
       return;
     }
+    if (!isCheckoutReady) {
+      setOrderMessage("Please add your WhatsApp contact, delivery location, and Google Maps address before checkout.");
+      return;
+    }
     setIsCheckingOut(true);
     setOrderMessage("");
     try {
@@ -775,7 +860,10 @@ function App() {
         amount: Math.round(cartTotal * currencies[currency].rate * 100),
         items: cartItems.map(({ id }) => id),
         currency,
-        callbackUrl: `${window.location.origin}${window.location.pathname}`
+        callbackUrl: `${window.location.origin}${window.location.pathname}`,
+        customerPhone: checkoutDetails.phone.trim(),
+        customerLocation: checkoutDetails.location.trim(),
+        customerAddress: checkoutDetails.gpsAddress.trim()
       }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Payment could not be initialized.");
@@ -783,7 +871,12 @@ function App() {
         items: cartItems,
         subtotal: cartTotal,
         total: cartTotal,
-        currency
+        currency,
+        checkoutDetails: {
+          phone: checkoutDetails.phone.trim(),
+          location: checkoutDetails.location.trim(),
+          gpsAddress: checkoutDetails.gpsAddress.trim()
+        }
       }));
       window.trackValCareEvent?.("begin_checkout", { value: cartTotal * currencies[currency].rate, currency });
       window.location.assign(result.authorizationUrl);
@@ -1563,12 +1656,29 @@ function App() {
             {orderPlaced && <div className="success-message">Order received. We’ll be in touch shortly.</div>}
             {!cartItems.length && !orderPlaced && <div className="panel-empty"><BagIcon /><p>Your cart is waiting for something lovely.</p><a href="#shop" onClick={closePanel}>Continue shopping</a></div>}
             {cartItems.map((product, index) => <div className="cart-item" key={`${product.id}-${index}`}><div className={`cart-thumb ${product.tone}`}>{product.icon}</div><div><strong>{product.name}</strong><span>{formatPrice(product.price)}</span></div><button className="remove-item" onClick={() => removeFromBag(index)} aria-label={`Remove ${product.name}`} title={`Remove ${product.name}`}>×</button></div>)}
-            {!!cartItems.length && <><div className="cart-total"><span>Subtotal</span><strong>{formatPrice(cartTotal)}</strong></div><button className="primary-button checkout-button" onClick={placeOrder} disabled={isCheckingOut}>{isCheckingOut ? "Opening secure payment..." : "Pay securely with Paystack"}</button></>}
+            {!!cartItems.length && <>
+              <div className="checkout-details-form">
+                <label>
+                  <span>WhatsApp / contact</span>
+                  <input type="tel" value={checkoutDetails.phone} onChange={(event) => setCheckoutDetails((current) => ({ ...current, phone: event.target.value }))} placeholder="e.g. +233 24 123 4567" required />
+                </label>
+                <label>
+                  <span>Location</span>
+                  <input type="text" value={checkoutDetails.location} onChange={(event) => setCheckoutDetails((current) => ({ ...current, location: event.target.value }))} placeholder="Your area or town" required />
+                </label>
+                <label>
+                  <span>GPS address / Google Maps address</span>
+                  <input type="text" value={checkoutDetails.gpsAddress} onChange={(event) => setCheckoutDetails((current) => ({ ...current, gpsAddress: event.target.value }))} placeholder="House no., road, landmark, or map pin" required />
+                </label>
+              </div>
+              <div className="cart-total"><span>Subtotal</span><strong>{formatPrice(cartTotal)}</strong></div>
+              <button className="primary-button checkout-button" onClick={placeOrder} disabled={isCheckingOut || !isCheckoutReady}>{isCheckingOut ? "Opening secure payment..." : "Pay securely with Paystack"}</button>
+            </>}
             {orderMessage && <small className="password-message order-message">{orderMessage}</small>}
           </div>}
           {activePanel === "notifications" && <div className="panel-content notification-list">{notifications.length ? notifications.map((notification) => <div className="notice-item" key={notification.id}><span className="notice-mark">✦</span><div><strong>{notification.title}</strong><p>{notification.message}</p>{notification.orderId && <div className="order-id-copy"><code>{notification.orderId}</code><button type="button" onClick={() => copyOrderId(notification.orderId)}>Copy ID</button></div>}<small>{notification.createdAt?.toDate?.().toLocaleDateString?.() || "Just now"}</small></div></div>) : <div className="panel-empty"><p>No new shop updates yet.</p></div>}</div>}
           {activePanel === "transactions" && <div className="panel-content"><div className="transaction-card"><div><strong>VC-1042</strong><span>Aug 28, 2026 · 2 items</span></div><strong>{formatPrice(34)}</strong><em>Delivered</em></div><div className="transaction-card"><div><strong>VC-0987</strong><span>Jul 14, 2026 · 1 item</span></div><strong>{formatPrice(18)}</strong><em>Delivered</em></div><div className="panel-empty"><p>Your purchases will appear here after checkout.</p></div></div>}
-          {activePanel === "report" && isAdmin && <div className="panel-content report-panel">{isLoadingReport ? <p className="panel-empty">Loading sales report...</p> : <><div className="report-toggle"><button className={`report-tab pending ${reportView === "pending" ? "active" : ""}`} type="button" onClick={() => setReportView("pending")}>Pending delivery</button><button className={`report-tab delivered ${reportView === "delivered" ? "active" : ""}`} type="button" onClick={() => setReportView("delivered")}>Delivered</button></div>{productMessage && <small className="password-message">{productMessage}</small>}<section className="report-section"><h3>{reportView === "pending" ? "Awaiting delivery" : "Delivered orders"}</h3>{(reportView === "pending" ? pendingOrders : deliveredOrders).length ? (reportView === "pending" ? pendingOrders : deliveredOrders).map((order) => <div className="report-order" key={order.id}><div className="report-buyer-details"><div className="report-buyer"><strong>Customer: {order.customerName || order.customerEmail || "Customer"}</strong><small>{order.customerEmail || ""}</small><small>Order {order.id} · {order.items?.length || 0} item(s)</small></div><div className="report-item-list">{order.items?.length ? order.items.map((item, itemIndex) => <div className="report-item" key={`${order.id}-${item.id || item.name}-${itemIndex}`}><span>{item.name || "Item"} × {item.quantity || 1}</span><strong>{formatPrice((Number(item.price) || 0) * (item.quantity || 1))}</strong></div>) : <small>No item details recorded.</small>}</div></div><div className="report-order-actions"><strong>Total {formatPrice(order.total || 0)}</strong>{reportView === "pending" ? <button className="report-delivered-button" type="button" onClick={() => markOrderDelivered(order.id)}>Mark delivered</button> : <span className="report-status-tag">Delivered</span>}</div></div>) : <p className="panel-empty">{reportView === "pending" ? "No successful payments are waiting for delivery." : "No delivered orders yet."}</p>}</section><section className="report-section"><h3>Best-selling products</h3>{bestSellingProducts.length ? bestSellingProducts.slice(0, 10).map((product) => <div className="report-row" key={product.name}><span><strong>{product.name}</strong><small>{product.quantity} sold</small></span><strong>{formatPrice(product.revenue)}</strong></div>) : <p className="panel-empty">No completed transactions yet.</p>}</section></>}</div>}
+          {activePanel === "report" && isAdmin && <div className="panel-content report-panel">{isLoadingReport ? <p className="panel-empty">Loading sales report...</p> : <><div className="report-toggle"><button className={`report-tab pending ${reportView === "pending" ? "active" : ""}`} type="button" onClick={() => setReportView("pending")}>Pending delivery</button><button className={`report-tab delivered ${reportView === "delivered" ? "active" : ""}`} type="button" onClick={() => setReportView("delivered")}>Delivered</button></div>{productMessage && <small className="password-message">{productMessage}</small>}<section className="report-section"><h3>{reportView === "pending" ? "Awaiting delivery" : "Delivered orders"}</h3>{(reportView === "pending" ? pendingOrders : deliveredOrders).length ? (reportView === "pending" ? pendingOrders : deliveredOrders).map((order) => { const isExpanded = String(selectedOrderId) === String(order.id); return (<div className={`report-order ${isExpanded ? "expanded" : ""}`} key={order.id}><div className="report-buyer-details"><button type="button" className="report-buyer" onClick={() => toggleOrderDetails(order.id)}><strong>Customer: {order.customerName || order.customerEmail || "Customer"}</strong><small>{order.customerEmail || ""}</small><small>Order {order.id} · {order.items?.length || 0} item(s)</small>{order.customerPhone || order.customerLocation || order.customerAddress ? <small>{order.customerPhone || "No contact saved"} · {order.customerLocation || "No location saved"}</small> : null}</button>{isExpanded && <div className="report-order-details"><div className="report-detail-grid"><div className="report-detail-card"><span className="report-detail-label">Contact</span><strong>{order.customerPhone || "No contact saved"}</strong></div><div className="report-detail-card"><span className="report-detail-label">Location</span><strong>{order.customerLocation || "No location saved"}</strong></div><div className="report-detail-card report-detail-wide"><span className="report-detail-label">GPS / map address</span><strong>{order.customerAddress || "No GPS address saved"}</strong></div></div><div className="report-action-row"><button type="button" className="report-action-button" onClick={() => copyTextValue("Contact", order.customerPhone)}>Copy contact</button><button type="button" className="report-action-button" onClick={() => copyTextValue("Email", order.customerEmail)}>Copy email</button><button type="button" className="report-action-button" onClick={() => copyTextValue("GPS address", order.customerAddress)}>Copy GPS</button>{order.customerPhone && <><button type="button" className="report-action-button whatsapp" onClick={() => openWhatsAppChat(order.customerPhone, `Hello, I am following up on your order with Val's Glam.`)}>WhatsApp</button><button type="button" className="report-action-button" onClick={() => callCustomer(order.customerPhone)}>Call</button><button type="button" className="report-action-button" onClick={() => textCustomer(order.customerPhone)}>Text</button></>}{order.customerAddress && <button type="button" className="report-action-button" onClick={() => openMapAddress(order.customerAddress)}>Open map</button>}</div><div className="report-item-list">{order.items?.length ? order.items.map((item, itemIndex) => <div className="report-item" key={`${order.id}-${item.id || item.name}-${itemIndex}`}><div className="report-item-info"><span>{item.name || "Item"}</span><small>Qty {item.quantity || 1}</small></div><strong>{formatPrice((Number(item.price) || 0) * (item.quantity || 1))}</strong></div>) : <small>No item details recorded.</small>}</div></div>}</div><div className="report-order-actions"><strong>Total {formatPrice(order.total || 0)}</strong>{reportView === "pending" ? <button className="report-delivered-button" type="button" onClick={() => markOrderDelivered(order.id)}>Mark delivered</button> : <span className="report-status-tag">Delivered</span>}<button type="button" className="report-expand-button" onClick={() => toggleOrderDetails(order.id)}>{isExpanded ? "Hide details" : "View details"}</button></div></div>); }) : <p className="panel-empty">{reportView === "pending" ? "No successful payments are waiting for delivery." : "No delivered orders yet."}</p>}</section><section className="report-section"><h3>Best-selling products</h3>{bestSellingProducts.length ? bestSellingProducts.slice(0, 10).map((product) => <div className="report-row" key={product.name}><span><strong>{product.name}</strong><small>{product.quantity} sold</small></span><strong>{formatPrice(product.revenue)}</strong></div>) : <p className="panel-empty">No completed transactions yet.</p>}</section></>}</div>}
           {activePanel === "reviews" && selectedProduct && <div className="panel-content reviews-panel"><div className="reviews-product"><span className={`cart-thumb ${selectedProduct.tone}`}>{selectedProduct.icon}</span><div><strong>{selectedProduct.name}</strong><span>{formatPrice(selectedProduct.price)}</span></div></div><div className="review-list">{reviews.length ? reviews.map((review) => <article className="review-item" key={review.id}><div className="review-meta"><strong>{review.userName}</strong><span>{"★".repeat(review.rating)}{"☆".repeat(5 - review.rating)}</span></div><p>{review.comment}</p></article>) : <p className="review-empty">No reviews yet. Be the first to share your thoughts.</p>}</div><form className="review-form" onSubmit={submitReview}><label htmlFor="review-rating">Your rating</label><select id="review-rating" value={reviewRating} onChange={(event) => setReviewRating(event.target.value)}><option value="5">★★★★★</option><option value="4">★★★★☆</option><option value="3">★★★☆☆</option><option value="2">★★☆☆☆</option><option value="1">★☆☆☆☆</option></select><textarea value={reviewText} onChange={(event) => setReviewText(event.target.value)} placeholder="Share your thoughts" maxLength="500" required /><button className="settings-save" type="submit" disabled={isSubmittingReview}>{isSubmittingReview ? "Saving review..." : "Add review"}</button>{reviewMessage && <small className="password-message">{reviewMessage}</small>}</form></div>}
           {activePanel === "settings" && <div className="panel-content settings-list">
             <div className="setting-control"><label htmlFor="currency">{text.currency}</label><select id="currency" value={currency} onChange={(event) => setCurrency(event.target.value)}>{Object.keys(currencies).map((code) => <option key={code} value={code}>{code} ({currencies[code].symbol})</option>)}</select></div>
