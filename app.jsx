@@ -154,6 +154,15 @@ function App() {
       window.scrollTo(0, scrollY);
     };
   }, [activePanel]);
+
+  useEffect(() => {
+    if (!imagePreviewProduct) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setImagePreviewProduct(null);
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [imagePreviewProduct]);
   const [adminMode, setAdminMode] = useState(false);
   const [adminSetupAvailable, setAdminSetupAvailable] = useState(false);
   const [accountMessage, setAccountMessage] = useState("");
@@ -162,6 +171,7 @@ function App() {
   const [subscribeMessage, setSubscribeMessage] = useState("");
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [imagePreviewProduct, setImagePreviewProduct] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewText, setReviewText] = useState("");
@@ -1256,6 +1266,8 @@ function App() {
     setActivePanel("reviews");
   };
 
+  const openImagePreview = (product) => setImagePreviewProduct(product);
+
   const submitReview = async (event) => {
     event.preventDefault();
     const user = window.valCareAuth?.currentUser;
@@ -1501,7 +1513,7 @@ function App() {
           <div className="product-grid">
             {filteredProducts.map((product) => (
               <article className="product-card" key={product.id}>
-                <div className={`product-image ${product.tone}`}>{product.imageUrl ? <img src={product.imageUrl} alt="" /> : <span>{product.icon}</span>}{product.tag && <span className="badge">{product.tag}</span>}{userName && !isAdmin && <button className={`favorite-button ${favoriteIds.includes(String(product.id)) ? "active" : ""}`} type="button" onClick={() => toggleFavorite(product)} aria-label={favoriteIds.includes(String(product.id)) ? `Remove ${product.name} from favorites` : `Save ${product.name} to favorites`}>{favoriteIds.includes(String(product.id)) ? "♥" : "♡"}</button>}</div>
+                <div className={`product-image ${product.tone}`} role="button" tabIndex="0" onClick={() => openImagePreview(product)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openImagePreview(product); } }} aria-label={`View larger image of ${product.name}`} title="View larger image">{product.imageUrl ? <img src={product.imageUrl} alt={`${product.name} product`} /> : <span>{product.icon}</span>}{product.tag && <span className="badge">{product.tag}</span>}{userName && !isAdmin && <button className={`favorite-button ${favoriteIds.includes(String(product.id)) ? "active" : ""}`} type="button" onClick={(event) => { event.stopPropagation(); toggleFavorite(product); }} aria-label={favoriteIds.includes(String(product.id)) ? `Remove ${product.name} from favorites` : `Save ${product.name} to favorites`}>{favoriteIds.includes(String(product.id)) ? "♥" : "♡"}</button>}</div>
                 <div className="product-info"><h3>{product.name}</h3><div className="product-bottom"><span className="price">{formatPrice(product.price)}</span><span className={`stock-label ${Number(product.stock) <= 0 ? "out-of-stock" : ""}`}>{Number(product.stock) <= 0 ? "Sold out" : `${product.stock} left`}</span><button className="review-button" onClick={() => openReviews(product)}>{text.reviews}</button>{isAdmin ? <span className="admin-product-actions"><button className="admin-edit-button" type="button" onClick={() => { editProduct(product); setActivePanel("inventory"); }}>Edit</button><button className="admin-delete-button" type="button" onClick={() => confirmDeleteProduct(product)}>Delete</button></span> : <button className={`add-button ${Number(product.stock) <= 0 ? "out-of-stock-button" : ""}`} onClick={() => addToBag(product)} disabled={Number(product.stock) <= 0}>{Number(product.stock) <= 0 ? "Out of stock" : `+ ${text.add}`}</button>}</div></div>
               </article>
             ))}
@@ -1552,6 +1564,13 @@ function App() {
           <h2 id="install-help-title">Install Val's Glam</h2>
           {isIos ? <ol><li>Tap the <strong>Share</strong> button in Safari.</li><li>Choose <strong>Add to Home Screen</strong>.</li><li>Tap <strong>Add</strong> to finish.</li></ol> : <p>Open your browser menu and choose <strong>Install Val's Glam</strong> or <strong>Add to Home screen</strong>. The exact wording depends on your browser.</p>}
           <button className="settings-save" type="button" onClick={() => setInstallHelpOpen(false)}>Got it</button>
+        </section>
+      </div>, document.body)}
+      {imagePreviewProduct && ReactDOM.createPortal(<div className="image-lightbox-backdrop" role="presentation" onClick={() => setImagePreviewProduct(null)}>
+        <section className="image-lightbox" role="dialog" aria-modal="true" aria-labelledby="image-lightbox-title" onClick={(event) => event.stopPropagation()}>
+          <button className="close-button image-lightbox-close" type="button" onClick={() => setImagePreviewProduct(null)} aria-label="Close product image">×</button>
+          <div className={`image-lightbox-art ${imagePreviewProduct.tone}`}>{imagePreviewProduct.imageUrl ? <img src={imagePreviewProduct.imageUrl} alt={imagePreviewProduct.name} /> : <span>{imagePreviewProduct.icon}</span>}</div>
+          <div className="image-lightbox-details"><p className="eyebrow">{imagePreviewProduct.category}</p><h2 id="image-lightbox-title">{imagePreviewProduct.name}</h2><strong>{formatPrice(imagePreviewProduct.price)}</strong></div>
         </section>
       </div>, document.body)}
       {activePanel && ReactDOM.createPortal(<div className="panel-backdrop" onClick={closePanel}>

@@ -386,6 +386,15 @@ footer { background: #d8b34a; border-top: 0; color: #392719; font-size: 11px; pa
 .install-help ol { display: grid; gap: 10px; margin: 0 0 24px; padding-left: 22px; }
 .install-help strong { color: var(--ink); }
 .install-help .settings-save { width: 100%; }
+.image-lightbox-backdrop { align-items: center; background: rgba(36, 21, 44, .7); display: flex; inset: 0; justify-content: center; padding: 24px; position: fixed; z-index: 60; }
+.image-lightbox { animation: panel-backdrop-in .22s ease-out both; background: var(--paper); box-shadow: 0 24px 70px rgba(36, 21, 44, .3); max-height: calc(100dvh - 48px); max-width: 760px; overflow-y: auto; padding: 18px; position: relative; width: min(100%, 760px); }
+.image-lightbox-close { color: var(--ink); position: absolute; right: 18px; top: 14px; z-index: 1; }
+.image-lightbox-art { align-items: center; display: flex; justify-content: center; min-height: min(62vh, 560px); overflow: hidden; }
+.image-lightbox-art img { display: block; max-height: min(62vh, 560px); max-width: 100%; object-fit: contain; }
+.image-lightbox-art > span { filter: drop-shadow(10px 15px 7px rgba(39,51,45,.14)); font-size: clamp(90px, 18vw, 180px); }
+.image-lightbox-details { border-top: 1px solid var(--line); padding: 18px 8px 6px; }
+.image-lightbox-details h2 { color: var(--ink); font-family: "Playfair Display", serif; font-size: 30px; font-weight: 500; margin: 0 0 7px; }
+.image-lightbox-details strong { color: var(--deep-sage); font-size: 15px; }
 .cart-item { align-items: center; border-bottom: 1px solid var(--line); display: grid; gap: 12px; grid-template-columns: 54px 1fr auto; padding: 13px 0; }
 .theme-dark .cart-item { border-color: #516257; }
 .cart-thumb { align-items: center; display: flex; font-size: 25px; height: 54px; justify-content: center; }
