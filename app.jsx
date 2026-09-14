@@ -491,7 +491,12 @@ function App() {
     if (!user || isAdmin) return;
     window.localStorage.setItem(`valcare-cart-${user.uid}`, JSON.stringify(cartItems));
     if (window.valCareDb) {
-      window.valCareDb.collection("userProfiles").doc(user.uid).set({ cart: cartItems }, { merge: true }).catch(() => {});
+      window.valCareDb.collection("userProfiles").doc(user.uid).set({
+        userId: user.uid,
+        email: user.email || "",
+        cart: cartItems,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: true }).catch(() => {});
     }
   }, [cartItems, isAdmin]);
 
@@ -1426,7 +1431,12 @@ function App() {
     if (user) {
       window.localStorage.setItem(`valcare-read-notifications-${user.uid}`, JSON.stringify(nextReadNotificationIds));
       if (window.valCareDb) {
-        window.valCareDb.collection("userProfiles").doc(user.uid).set({ readNotificationIds: nextReadNotificationIds }, { merge: true }).catch(() => {});
+        window.valCareDb.collection("userProfiles").doc(user.uid).set({
+          userId: user.uid,
+          email: user.email || "",
+          readNotificationIds: nextReadNotificationIds,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true }).catch(() => {});
       }
     }
     setActivePanel("notifications");
