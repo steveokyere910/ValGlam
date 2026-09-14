@@ -8,7 +8,7 @@ const firebaseConfig = {
   measurementId: "G-B63SXKQXSC"
 };
 
-window.valCarePaystackPublicKey = "pk_live_304204e9c806c48c9638865646cc5f4f7162a1ef";
+window.valCarePaystackPublicKey = "pk_live_7a007406a4fbe121a6733261cb39ff84ad72e0af";
 window.valCarePaymentApiUrl = "https://valcare-payments.frankokyere910.workers.dev";
 window.valCareVapidKey = "BNcP67r2bdKH58rf8UJ0nnxFGEfPxS4VsScGl8cLjzhWaRHVHejAJaQ8G6e7STd300v1AoTVb8tytfi40mzsXmU";
 window.valCareCloudinaryCloudName = "zwemtxte";

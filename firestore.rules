@@ -92,7 +92,24 @@ service cloud.firestore {
 		}
 
 		match /orders/{orderId} {
-			allow create: if false;
+			allow create: if signedIn()
+				&& request.resource.data.userId == request.auth.uid
+				&& request.resource.data.customerEmail == request.auth.token.email
+				&& request.resource.data.customerName is string
+				&& request.resource.data.customerName.size() > 0
+				&& request.resource.data.customerName.size() <= 120
+				&& request.resource.data.items is list
+				&& request.resource.data.items.size() > 0
+				&& request.resource.data.items.size() <= 200
+				&& request.resource.data.subtotal is number
+				&& request.resource.data.total is number
+				&& request.resource.data.currency is string
+				&& request.resource.data.status == 'paid'
+				&& request.resource.data.paymentReference is string
+				&& request.resource.data.paymentReference.size() > 0
+				&& request.resource.data.id == orderId
+				&& request.resource.data.createdAt is timestamp
+				&& request.resource.data.keys().hasOnly(['id', 'userId', 'customerName', 'customerEmail', 'items', 'subtotal', 'total', 'currency', 'status', 'paymentReference', 'createdAt']);
 			allow read: if admin() || (signedIn() && resource.data.userId == request.auth.uid);
 			allow update: if admin()
 				&& request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'deliveredAt'])

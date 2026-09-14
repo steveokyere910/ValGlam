@@ -193,7 +193,8 @@ export default {
         return json(
           {
             status: result.data?.status || "failed",
-            reference
+            reference,
+            orderId: reference
           },
           200,
           origin

@@ -305,6 +305,17 @@ function App() {
 
   useEffect(() => {
     if (!window.valCareAuth) return undefined;
+    window.valCareAuth.getRedirectResult().catch((error) => {
+      setAuthMode("login");
+      setAccountMessage(`Google sign-in failed. ${error.message || "Check your Firebase Authentication settings."} (${error.code || "unknown-error"})`);
+      setActivePanel("auth");
+      setIsAccountLoading(false);
+    });
+    return undefined;
+  }, []);
+
+  useEffect(() => {
+    if (!window.valCareAuth) return undefined;
     let authRequest = 0;
     return window.valCareAuth.onAuthStateChanged(async (user) => {
       const requestId = ++authRequest;
@@ -382,19 +393,71 @@ function App() {
             }
             return;
           }
+          const orderId = result.orderId || reference;
+          let pendingOrder = null;
+          try {
+            pendingOrder = JSON.parse(window.localStorage.getItem(`valcare-pending-order-${reference}`) || "null");
+          } catch {
+            pendingOrder = null;
+          }
+          const orderItems = Array.isArray(pendingOrder?.items) && pendingOrder.items.length ? pendingOrder.items : cartItems;
+          const orderDocument = {
+            id: orderId,
+            userId: user.uid,
+            customerName: user.displayName || user.email?.split("@")[0] || "Customer",
+            customerEmail: user.email || "",
+            items: orderItems.map((item) => ({
+              id: item.id,
+              name: item.name,
+              category: item.category,
+              price: Number(item.price) || 0,
+              quantity: 1
+            })),
+            subtotal: Number(pendingOrder?.subtotal ?? cartTotal) || 0,
+            total: Number(pendingOrder?.total ?? cartTotal) || 0,
+            currency,
+            status: "paid",
+            paymentReference: reference,
+            createdAt: firebase.firestore.Timestamp.now()
+          };
+
+          let orderSaved = false;
+          try {
+            await window.valCareDb.collection("orders").doc(String(orderId)).set(orderDocument);
+            window.localStorage.removeItem(`valcare-pending-order-${reference}`);
+            orderSaved = true;
+          } catch (orderError) {
+            console.error("Order record could not be saved to Firestore", orderError);
+            setOrderMessage(`Payment was confirmed, but the order could not be saved (${orderError.code || "unknown-error"}). Please contact us with reference ${reference}.`);
+          }
+
+          if (orderSaved) {
+            setCartItems([]);
+            setCart(0);
+          }
           setOrderPlaced(true);
           setActivePanel("cart");
           try {
             await window.valCareDb.collection("notifications").add({
               title: "Thank you for your order",
-              message: `Your payment was confirmed. Order ID: ${result.orderId}. Keep this ID to verify your purchase or delivery status.`,
-              orderId: String(result.orderId),
+              message: `Your payment was confirmed. Order ID: ${orderId}. Keep this ID to verify your purchase or delivery status.`,
+              orderId: String(orderId),
               audience: "user",
               recipientId: user.uid,
               createdAt: firebase.firestore.FieldValue.serverTimestamp()
             });
+            setNotifications((current) => [{
+              id: `order-${orderId}`,
+              title: "Thank you for your order",
+              message: `Your payment was confirmed. Order ID: ${orderId}. Keep this ID to verify your purchase or delivery status.`,
+              orderId: String(orderId),
+              audience: "user",
+              recipientId: user.uid,
+              createdAt: { toDate: () => new Date() }
+            }, ...current].slice(0, 20));
           } catch (notificationError) {
             console.error("Order notification could not be created", notificationError);
+            setOrderMessage(`Order saved, but the notification could not be created (${notificationError.code || "unknown-error"}).`);
           }
           window.trackValCareEvent?.("purchase", { transaction_id: reference });
         } catch (error) {
@@ -604,12 +667,21 @@ function App() {
     setIsLoadingReport(true);
     setLoadingAction("report");
     setActivePanel("report");
+    setProductMessage("");
     try {
-      const snapshot = await window.valCareDb.collection("orders").orderBy("createdAt", "desc").limit(200).get();
-      setAdminOrders(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+      let snapshot;
+      try {
+        snapshot = await window.valCareDb.collection("orders").orderBy("createdAt", "desc").limit(200).get();
+      } catch (queryError) {
+        snapshot = await window.valCareDb.collection("orders").limit(200).get();
+      }
+      const orders = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      orders.sort((left, right) => (right.createdAt?.toMillis?.() || 0) - (left.createdAt?.toMillis?.() || 0));
+      setAdminOrders(orders);
     } catch (error) {
       setAdminOrders([]);
-      setProductMessage("Could not load the sales report.");
+      const code = String(error.code || "").replace("firestore/", "");
+      setProductMessage(`Could not load the sales report (${code || "unknown-error"}).`);
     } finally {
       setIsLoadingReport(false);
       setLoadingAction(null);
@@ -707,6 +779,12 @@ function App() {
       }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Payment could not be initialized.");
+      window.localStorage.setItem(`valcare-pending-order-${result.reference}`, JSON.stringify({
+        items: cartItems,
+        subtotal: cartTotal,
+        total: cartTotal,
+        currency
+      }));
       window.trackValCareEvent?.("begin_checkout", { value: cartTotal * currencies[currency].rate, currency });
       window.location.assign(result.authorizationUrl);
     } catch (error) {
@@ -1149,6 +1227,11 @@ function App() {
         setShowWelcomeAnimation(true);
       }
     } catch (error) {
+      if (providerName === "Google" && ["auth/internal-error", "auth/popup-blocked"].includes(error.code)) {
+        setAccountMessage("Opening Google sign-in in this tab...");
+        await window.valCareAuth.signInWithRedirect(new firebase.auth.GoogleAuthProvider());
+        return;
+      }
       const messages = {
         "auth/popup-closed-by-user": `${providerName} sign-in was cancelled.`,
         "auth/unauthorized-domain": `Google sign-in is not enabled for ${window.location.hostname || "this domain"}. Add this domain in Firebase Authentication settings, or use the email form below.`,
@@ -1158,7 +1241,8 @@ function App() {
         "auth/popup-blocked": "Your browser blocked the sign-in window. Allow pop-ups and try again.",
         "auth/invalid-provider-id": "Instagram requires a configured Firebase OIDC provider before it can be used."
       };
-      setAccountMessage(messages[error.code] || `${providerName} sign-in failed. Check that the provider is enabled in Firebase and try again.`);
+      const message = messages[error.code] || `${providerName} sign-in failed. Check that the provider is enabled in Firebase and try again.`;
+      setAccountMessage(`${message} (${error.code || "unknown-error"})`);
       setIsAccountLoading(false);
     }
   };
@@ -1472,7 +1556,7 @@ function App() {
       </div>, document.body)}
       {activePanel && ReactDOM.createPortal(<div className="panel-backdrop" onClick={closePanel}>
         <aside className={`account-panel theme-${theme}`} onClick={(event) => event.stopPropagation()}>
-          <div className="panel-header"><div><p className="eyebrow">ValCare account</p><h2>{activePanel === "cart" ? text.cart : activePanel === "notifications" ? text.notifications : activePanel === "transactions" ? text.transactions : activePanel === "report" ? "Sales report" : activePanel === "reviews" ? "Product reviews" : activePanel === "inventory" ? "Manage products" : activePanel === "create-account" || (activePanel === "auth" && authMode === "create") ? "Create your account" : activePanel === "auth" ? "Log in" : text.settings}</h2></div><button className="close-button" onClick={closePanel} aria-label="Close panel">×</button></div>{activePanel === "report" && isAdmin && <input className="admin-order-search" type="search" value={orderSearch} onChange={(event) => setOrderSearch(event.target.value)} placeholder="Search order ID, customer, or email" aria-label="Search order ID, customer, or email" />}
+          <div className="panel-header"><div><p className="eyebrow">ValCare account</p><h2>{activePanel === "cart" ? text.cart : activePanel === "notifications" ? text.notifications : activePanel === "transactions" ? text.transactions : activePanel === "report" ? "Sales report" : activePanel === "reviews" ? "Product reviews" : activePanel === "inventory" ? "Manage products" : activePanel === "create-account" || (activePanel === "auth" && authMode === "create") ? "Create your account" : activePanel === "auth" ? "Log in" : text.settings}</h2></div><button className="close-button" onClick={closePanel} aria-label="Close panel">×</button></div>{activePanel === "report" && isAdmin && <><input className="admin-order-search" type="search" value={orderSearch} onChange={(event) => setOrderSearch(event.target.value)} placeholder="Search order ID, customer, or email" aria-label="Search order ID, customer, or email" /><button className="report-refresh-button" type="button" onClick={openAdminReport} disabled={isLoadingReport}>Refresh report</button></>}
           {(activePanel === "create-account" || activePanel === "auth") && <div className="panel-content account-form">{isAccountLoading && <div className="account-loading-state"><LoadingSpinner label="Preparing your account" /><span>Finishing your ValCare experience...</span></div>}<p className="account-intro">{authMode === "create" ? "Create your account to collect your ValCare finds." : "Log in to continue shopping and manage your account."}</p><div className="social-auth-grid"><button className="social-auth-button google-auth-button" type="button" onClick={() => signInWithProvider("Google")} disabled={isAccountLoading}><ProviderLogo name="Google" />Continue with Google</button></div><div className="form-divider"><span>or use email</span></div><form autoComplete={authMode === "create" ? "off" : "on"} onSubmit={authMode === "create" ? createAccount : login}>{authMode === "create" && <input type="text" autoComplete="off" placeholder="Your name" value={account.name} onChange={(event) => setAccount({ ...account, name: event.target.value })} required />}<input type="email" autoComplete={authMode === "create" ? "off" : "email"} placeholder="Email address" value={account.email} onChange={(event) => setAccount({ ...account, email: event.target.value })} required /><PasswordInput autoComplete={authMode === "create" ? "new-password" : "current-password"} placeholder="Password" value={account.password} onChange={(event) => setAccount({ ...account, password: event.target.value })} minLength="6" required />{authMode === "create" && <PasswordInput autoComplete="new-password" placeholder="Confirm password" value={account.confirm} onChange={(event) => setAccount({ ...account, confirm: event.target.value })} minLength="6" required />}<button className="settings-save" type="submit" disabled={isAccountLoading}>{isAccountLoading ? <LoadingSpinner label="Loading" /> : authMode === "create" ? "Create account" : "Log in"}</button>{accountMessage && <small className="password-message">{accountMessage}</small>}</form><button className="auth-switch" type="button" disabled={isAccountLoading} onClick={() => { setAuthMode(authMode === "create" ? "login" : "create"); setAdminMode(false); setAccountMessage(""); }}>{authMode === "create" ? "Already have an account? Log in" : "New to ValCare? Create an account"}</button></div>}
           {activePanel === "wishlist" && !isAdmin && <div className="panel-content"><div className="wishlist-list">{wishlistItems.length ? wishlistItems.map((product) => <article className="wishlist-item" key={product.id}><span className={`cart-thumb ${product.tone}`}>{product.icon}</span><div><strong>{product.name}</strong><span>{formatPrice(product.price)}</span></div><button className="add-button" type="button" onClick={() => addToBag(product)}>Add to bag</button><button className="remove-item" type="button" onClick={() => toggleFavorite(product)} aria-label={`Remove ${product.name} from favorites`}>×</button></article>) : <div className="panel-empty"><p>Your favorite products will appear here.</p></div>}</div></div>}
           {activePanel === "cart" && !isAdmin && <div className="panel-content">
@@ -1484,7 +1568,7 @@ function App() {
           </div>}
           {activePanel === "notifications" && <div className="panel-content notification-list">{notifications.length ? notifications.map((notification) => <div className="notice-item" key={notification.id}><span className="notice-mark">✦</span><div><strong>{notification.title}</strong><p>{notification.message}</p>{notification.orderId && <div className="order-id-copy"><code>{notification.orderId}</code><button type="button" onClick={() => copyOrderId(notification.orderId)}>Copy ID</button></div>}<small>{notification.createdAt?.toDate?.().toLocaleDateString?.() || "Just now"}</small></div></div>) : <div className="panel-empty"><p>No new shop updates yet.</p></div>}</div>}
           {activePanel === "transactions" && <div className="panel-content"><div className="transaction-card"><div><strong>VC-1042</strong><span>Aug 28, 2026 · 2 items</span></div><strong>{formatPrice(34)}</strong><em>Delivered</em></div><div className="transaction-card"><div><strong>VC-0987</strong><span>Jul 14, 2026 · 1 item</span></div><strong>{formatPrice(18)}</strong><em>Delivered</em></div><div className="panel-empty"><p>Your purchases will appear here after checkout.</p></div></div>}
-          {activePanel === "report" && isAdmin && <div className="panel-content report-panel">{isLoadingReport ? <p className="panel-empty">Loading sales report...</p> : <><div className="report-toggle"><button className={`report-tab pending ${reportView === "pending" ? "active" : ""}`} type="button" onClick={() => setReportView("pending")}>Pending delivery</button><button className={`report-tab delivered ${reportView === "delivered" ? "active" : ""}`} type="button" onClick={() => setReportView("delivered")}>Delivered</button></div>{productMessage && <small className="password-message">{productMessage}</small>}<section className="report-section"><h3>{reportView === "pending" ? "Awaiting delivery" : "Delivered orders"}</h3>{(reportView === "pending" ? pendingOrders : deliveredOrders).length ? (reportView === "pending" ? pendingOrders : deliveredOrders).map((order) => <div className="report-order" key={order.id}><div className="report-buyer-details"><button className="report-buyer" type="button" onClick={() => setSelectedOrderId(selectedOrderId === order.id ? null : order.id)}><strong>{order.customerName || order.customerEmail || "Customer"}</strong><small>{order.customerEmail || ""}</small><small>{order.items?.length || 0} item(s) · {order.status || "paid"}</small></button>{selectedOrderId === order.id && <div className="report-item-list">{order.items?.length ? order.items.map((item, itemIndex) => <div className="report-item" key={`${order.id}-${item.id || item.name}-${itemIndex}`}><span>{item.name || "Item"} × {item.quantity || 1}</span><strong>{formatPrice((Number(item.price) || 0) * (item.quantity || 1))}</strong></div>) : <small>No item details recorded.</small>}</div>}</div><div className="report-order-actions"><strong>{formatPrice(order.total || 0)}</strong>{reportView === "pending" ? <button className="report-delivered-button" type="button" onClick={() => markOrderDelivered(order.id)}>Mark delivered</button> : <span className="report-status-tag">Delivered</span>}</div></div>) : <p className="panel-empty">{reportView === "pending" ? "No successful payments are waiting for delivery." : "No delivered orders yet."}</p>}</section><section className="report-section"><h3>Best-selling products</h3>{bestSellingProducts.length ? bestSellingProducts.slice(0, 10).map((product) => <div className="report-row" key={product.name}><span><strong>{product.name}</strong><small>{product.quantity} sold</small></span><strong>{formatPrice(product.revenue)}</strong></div>) : <p className="panel-empty">No completed transactions yet.</p>}</section></>}</div>}
+          {activePanel === "report" && isAdmin && <div className="panel-content report-panel">{isLoadingReport ? <p className="panel-empty">Loading sales report...</p> : <><div className="report-toggle"><button className={`report-tab pending ${reportView === "pending" ? "active" : ""}`} type="button" onClick={() => setReportView("pending")}>Pending delivery</button><button className={`report-tab delivered ${reportView === "delivered" ? "active" : ""}`} type="button" onClick={() => setReportView("delivered")}>Delivered</button></div>{productMessage && <small className="password-message">{productMessage}</small>}<section className="report-section"><h3>{reportView === "pending" ? "Awaiting delivery" : "Delivered orders"}</h3>{(reportView === "pending" ? pendingOrders : deliveredOrders).length ? (reportView === "pending" ? pendingOrders : deliveredOrders).map((order) => <div className="report-order" key={order.id}><div className="report-buyer-details"><div className="report-buyer"><strong>Customer: {order.customerName || order.customerEmail || "Customer"}</strong><small>{order.customerEmail || ""}</small><small>Order {order.id} · {order.items?.length || 0} item(s)</small></div><div className="report-item-list">{order.items?.length ? order.items.map((item, itemIndex) => <div className="report-item" key={`${order.id}-${item.id || item.name}-${itemIndex}`}><span>{item.name || "Item"} × {item.quantity || 1}</span><strong>{formatPrice((Number(item.price) || 0) * (item.quantity || 1))}</strong></div>) : <small>No item details recorded.</small>}</div></div><div className="report-order-actions"><strong>Total {formatPrice(order.total || 0)}</strong>{reportView === "pending" ? <button className="report-delivered-button" type="button" onClick={() => markOrderDelivered(order.id)}>Mark delivered</button> : <span className="report-status-tag">Delivered</span>}</div></div>) : <p className="panel-empty">{reportView === "pending" ? "No successful payments are waiting for delivery." : "No delivered orders yet."}</p>}</section><section className="report-section"><h3>Best-selling products</h3>{bestSellingProducts.length ? bestSellingProducts.slice(0, 10).map((product) => <div className="report-row" key={product.name}><span><strong>{product.name}</strong><small>{product.quantity} sold</small></span><strong>{formatPrice(product.revenue)}</strong></div>) : <p className="panel-empty">No completed transactions yet.</p>}</section></>}</div>}
           {activePanel === "reviews" && selectedProduct && <div className="panel-content reviews-panel"><div className="reviews-product"><span className={`cart-thumb ${selectedProduct.tone}`}>{selectedProduct.icon}</span><div><strong>{selectedProduct.name}</strong><span>{formatPrice(selectedProduct.price)}</span></div></div><div className="review-list">{reviews.length ? reviews.map((review) => <article className="review-item" key={review.id}><div className="review-meta"><strong>{review.userName}</strong><span>{"★".repeat(review.rating)}{"☆".repeat(5 - review.rating)}</span></div><p>{review.comment}</p></article>) : <p className="review-empty">No reviews yet. Be the first to share your thoughts.</p>}</div><form className="review-form" onSubmit={submitReview}><label htmlFor="review-rating">Your rating</label><select id="review-rating" value={reviewRating} onChange={(event) => setReviewRating(event.target.value)}><option value="5">★★★★★</option><option value="4">★★★★☆</option><option value="3">★★★☆☆</option><option value="2">★★☆☆☆</option><option value="1">★☆☆☆☆</option></select><textarea value={reviewText} onChange={(event) => setReviewText(event.target.value)} placeholder="Share your thoughts" maxLength="500" required /><button className="settings-save" type="submit" disabled={isSubmittingReview}>{isSubmittingReview ? "Saving review..." : "Add review"}</button>{reviewMessage && <small className="password-message">{reviewMessage}</small>}</form></div>}
           {activePanel === "settings" && <div className="panel-content settings-list">
             <div className="setting-control"><label htmlFor="currency">{text.currency}</label><select id="currency" value={currency} onChange={(event) => setCurrency(event.target.value)}>{Object.keys(currencies).map((code) => <option key={code} value={code}>{code} ({currencies[code].symbol})</option>)}</select></div>
