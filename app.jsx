@@ -433,15 +433,8 @@ function App() {
             createdAt: firebase.firestore.Timestamp.now()
           };
 
-          let orderSaved = false;
-          try {
-            await window.valCareDb.collection("orders").doc(String(orderId)).set(orderDocument);
-            window.localStorage.removeItem(`valcare-pending-order-${reference}`);
-            orderSaved = true;
-          } catch (orderError) {
-            console.error("Order record could not be saved to Firestore", orderError);
-            setOrderMessage(`Payment was confirmed, but the order could not be saved (${orderError.code || "unknown-error"}). Please contact us with reference ${reference}.`);
-          }
+          const orderSaved = result.status === "paid";
+          if (orderSaved) window.localStorage.removeItem(`valcare-pending-order-${reference}`);
 
           if (orderSaved) {
             setCartItems([]);
@@ -808,6 +801,8 @@ function App() {
         email: user.email,
         amount: Math.round(cartTotal * currencies[currency].rate * 100),
         items: cartItems.map(({ id }) => id),
+        userId: user.uid,
+        customerName: user.displayName || user.email?.split("@")[0] || "Customer",
         currency,
         callbackUrl: `${window.location.origin}${window.location.pathname}`
       }) });
