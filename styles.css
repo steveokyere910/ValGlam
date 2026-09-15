@@ -471,6 +471,8 @@ footer { background: #d8b34a; border-top: 0; color: #392719; font-size: 11px; pa
 .transaction-card div strong, .transaction-card span { display: block; }
 .transaction-card span { color: var(--muted); font-size: 11px; margin-top: 5px; }
 .transaction-card em { color: var(--deep-sage); font-size: 10px; font-style: normal; grid-column: 1 / -1; text-transform: uppercase; }
+.transaction-card em.transaction-pending { color: #a66b12; }
+.transaction-card em.transaction-delivered { color: #1f6c3e; }
 .settings-list { display: grid; gap: 18px; }
 .setting-control { align-items: center; display: flex; justify-content: space-between; }
 .setting-control label { font-size: 13px; font-weight: 600; }
