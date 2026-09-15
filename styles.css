@@ -603,6 +603,12 @@ footer { background: #d8b34a; border-top: 0; color: #392719; font-size: 11px; pa
 @media (max-width: 760px) {
   .report-order { grid-template-columns: 1fr; }
   .report-order-actions { align-items: flex-start; min-width: 0; text-align: left; width: 100%; }
+  .account-panel:has(.report-panel) { max-width: none; padding-left: 16px; padding-right: 16px; width: 100%; }
+  .account-panel:has(.report-panel) .report-detail-grid { grid-template-columns: 1fr; }
+  .account-panel:has(.report-panel) .report-buyer { min-width: 0; width: 100%; }
+  .account-panel:has(.report-panel) .report-buyer small, .account-panel:has(.report-panel) .report-detail-card strong { overflow-wrap: anywhere; }
+  .account-panel:has(.report-panel) .report-action-row { align-items: stretch; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .account-panel:has(.report-panel) .report-action-button, .account-panel:has(.report-panel) .report-delivered-button { width: 100%; }
 }
 
 @keyframes background-drift {
