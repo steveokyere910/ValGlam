@@ -2,6 +2,8 @@ const allowedOrigins = new Set([
   "https://steveokyere910.github.io",
   "https://valscarea1.web.app",
   "https://valscarea1.firebaseapp.com",
+  "https://valsglam.web.app",
+  "https://valsglam.firebaseapp.com",
   "http://127.0.0.1:5500",
   "http://localhost:5500"
 ]);
@@ -71,7 +73,7 @@ function getCallbackUrl(value) {
 
     const isProduction =
       url.protocol === "https:" &&
-      ["steveokyere910.github.io", "valscarea1.web.app", "valscarea1.firebaseapp.com"].includes(url.hostname);
+      ["steveokyere910.github.io", "valscarea1.web.app", "valscarea1.firebaseapp.com", "valsglam.web.app", "valsglam.firebaseapp.com"].includes(url.hostname);
 
     return isLocal || isProduction ? url.href : null;
   } catch {
