@@ -9,7 +9,7 @@ const firebaseConfig = {
 };
 
 window.valCarePaystackPublicKey = "pk_live_7a007406a4fbe121a6733261cb39ff84ad72e0af";
-window.valCarePaymentApiUrl = "https://valcare-payments.frankokyere910.workers.dev";
+window.valCarePaymentApiUrl = "https://valcare-payments.okyeresolomon910.workers.dev";
 window.valCareVapidKey = "BNcP67r2bdKH58rf8UJ0nnxFGEfPxS4VsScGl8cLjzhWaRHVHejAJaQ8G6e7STd300v1AoTVb8tytfi40mzsXmU";
 window.valCareCloudinaryCloudName = "zwemtxte";
 window.valCareCloudinaryApiKey = "963816758362643";
