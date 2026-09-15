@@ -352,6 +352,11 @@ footer { background: #d8b34a; border-top: 0; color: #392719; font-size: 11px; pa
 .account-panel { animation: panel-slide-in .32s cubic-bezier(.22, 1, .36, 1) both; background: var(--paper); box-shadow: -15px 0 45px rgba(39, 51, 45, .12); height: 100vh; height: 100dvh; max-height: 100vh; max-height: 100dvh; max-width: 440px; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; padding: 34px; position: relative; transform-origin: right center; width: 100%; }
 .account-panel.theme-dark { --panel-bg: #292033; --panel-ink: #fffaff; --panel-muted: #d8c9df; --ink: #fffaff; --muted: #d8c9df; --line: #594a63; --paper: #292033; --deep-sage: #d7a4ef; --coral: #f1a08d; background: var(--panel-bg); color: var(--panel-ink); }
 .account-panel.theme-system { background: var(--paper); color: var(--ink); }
+.panel-backdrop:has(.product-preview-panel) { align-items: center; justify-content: center; padding: 24px; }
+.account-panel:has(.product-preview-panel) { animation: product-preview-in .28s cubic-bezier(.22, 1, .36, 1) both; border: 1px solid rgba(255,255,255,.7); border-radius: 18px; box-shadow: 0 24px 80px rgba(39, 51, 45, .24); height: auto; max-height: min(780px, 92dvh); max-width: 620px; padding: 26px; transform-origin: center; }
+.account-panel:has(.product-preview-panel) .panel-header { padding-bottom: 16px; }
+.account-panel:has(.product-preview-panel) .panel-header h2 { font-size: 27px; }
+@keyframes product-preview-in { from { opacity: 0; transform: translateY(18px) scale(.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes panel-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes panel-slide-in { 0% { opacity: 0; transform: translateX(34px) scale(.97); } 100% { opacity: 1; transform: translateX(0) scale(1); } }
 @media (prefers-color-scheme: dark) {
@@ -529,6 +534,9 @@ footer { background: #d8b34a; border-top: 0; color: #392719; font-size: 11px; pa
 
 @media (max-width: 760px) {
   .navbar { flex-wrap: wrap; padding: 14px 20px 12px; row-gap: 10px; } .nav-links { display: none; } .nav-actions { border-top: 1px solid var(--line); flex: 1 0 100%; gap: 7px; justify-content: flex-end; overflow-x: auto; padding-top: 10px; } .nav-actions::-webkit-scrollbar { display: none; } .secondary-nav-actions { display: none; } .secondary-nav-actions.open { align-items: center; background: var(--paper); border: 1px solid var(--line); box-shadow: var(--shadow); display: grid; gap: 4px; grid-template-columns: repeat(3, 36px); padding: 6px; position: absolute; right: 0; top: calc(100% + 8px); z-index: 2; } .user-name { flex: 0 0 auto; max-width: 115px; } .install-app-button, .push-enable-button { flex: 0 0 auto; font-size: 9px; padding: 9px 8px; } .icon-button { align-items: center; flex: 0 0 36px; height: 36px; justify-content: center; padding: 8px; } .icon-button svg { height: 20px; width: 20px; } .hero { grid-template-columns: 1fr; } .hero-copy { padding: 67px 25px 55px; } .hero-art { min-height: 340px; padding: 20px; } .hero-photo { border-width: 6px; border-radius: 22px; height: 300px; width: min(100%, 360px); } .hero-art::before { height: 300px; width: 300px; } .bottle { height: 190px; transform: scale(.78) rotate(7deg); width: 130px; }
+  .panel-backdrop:has(.product-preview-panel) { padding: 12px; }
+  .account-panel:has(.product-preview-panel) { border-radius: 14px; max-height: 94dvh; padding: 18px; }
+  .account-panel:has(.product-preview-panel) .product-preview-image { min-height: 210px; }
   .admin-nav-actions .secondary-nav-actions { display: flex; gap: 2px; }
   .section { padding: 64px 20px; } .section-heading { align-items: baseline; } .section h2 { font-size: 33px; } .view-all { font-size: 10px; } .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 23px 12px; } .product-image { height: 170px; } .product-image > span:not(.badge) { font-size: 51px; } .product-info h3 { font-size: 16px; } .product-bottom { align-items: flex-start; flex-direction: column; gap: 6px; } .add-button, .review-button { width: 100%; } .value-strip { grid-template-columns: 1fr; } .value-item { border-bottom: 1px solid #e0d7ca; border-right: 0; }
   .locations-section { padding: 58px 20px 24px; } .location-grid { grid-template-columns: 1fr; }
