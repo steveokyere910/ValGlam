@@ -8,6 +8,142 @@ const allowedOrigins = new Set([
   "http://localhost:5500"
 ]);
 
+let cachedAccessToken = null;
+let cachedAccessTokenExpiresAt = 0;
+
+function base64UrlEncode(value) {
+  const bytes = typeof value === "string" ? new TextEncoder().encode(value) : value;
+  let binary = "";
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function base64UrlDecode(value) {
+  const padded = value.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - value.length % 4) % 4);
+  const binary = atob(padded);
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
+
+async function getFirestoreAccessToken(serviceAccountJson) {
+  if (cachedAccessToken && Date.now() < cachedAccessTokenExpiresAt - 60000) return cachedAccessToken;
+
+  const serviceAccount = JSON.parse(serviceAccountJson);
+  const now = Math.floor(Date.now() / 1000);
+  const header = base64UrlEncode(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const claim = base64UrlEncode(JSON.stringify({
+    iss: serviceAccount.client_email,
+    scope: "https://www.googleapis.com/auth/datastore",
+    aud: "https://oauth2.googleapis.com/token",
+    iat: now,
+    exp: now + 3600
+  }));
+  const pem = serviceAccount.private_key.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g, "");
+  const signingKey = await crypto.subtle.importKey(
+    "pkcs8",
+    Uint8Array.from(atob(pem), (character) => character.charCodeAt(0)),
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const signature = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    signingKey,
+    new TextEncoder().encode(`${header}.${claim}`)
+  );
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${header}.${claim}.${base64UrlEncode(new Uint8Array(signature))}`
+  });
+  const result = await response.json();
+  if (!response.ok || !result.access_token) throw new Error("Firebase service account authentication failed.");
+  cachedAccessToken = result.access_token;
+  cachedAccessTokenExpiresAt = Date.now() + Number(result.expires_in || 3600) * 1000;
+  return cachedAccessToken;
+}
+
+async function firestoreCommit(env, writes) {
+  const token = await getFirestoreAccessToken(env.FIREBASE_SERVICE_ACCOUNT_JSON);
+  const projectId = env.FIREBASE_PROJECT_ID;
+  const response = await fetch(`https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents:commit`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ writes })
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error?.message || "Firestore stock update failed.");
+  return result;
+}
+
+function firestoreString(value) {
+  return { stringValue: String(value) };
+}
+
+function firestoreInteger(value) {
+  return { integerValue: String(value) };
+}
+
+async function reserveStock(env, reference, itemIds) {
+  if (!env.FIREBASE_PROJECT_ID || !env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    throw new Error("Firebase stock configuration is missing.");
+  }
+  const token = await getFirestoreAccessToken(env.FIREBASE_SERVICE_ACCOUNT_JSON);
+  const database = `projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents`;
+  const reservationName = `${database}/paymentReservations/${reference}`;
+  const quantities = new Map();
+  itemIds.forEach((id) => quantities.set(String(id), (quantities.get(String(id)) || 0) + 1));
+  const productNames = [...quantities.keys()].map((id) => `${database}/products/${id}`);
+
+  const reservationResponse = await fetch(`https://firestore.googleapis.com/v1/${reservationName}`, { headers: { Authorization: `Bearer ${token}` } });
+  if (reservationResponse.ok) return;
+  if (reservationResponse.status !== 404) throw new Error("Could not check the payment reservation.");
+
+  const batchResponse = await fetch(`https://firestore.googleapis.com/v1/${database}:batchGet`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ documents: productNames })
+  });
+  const batchResult = await batchResponse.json();
+  if (!batchResponse.ok) throw new Error(batchResult.error?.message || "Could not load product stock.");
+  const documents = (Array.isArray(batchResult) ? batchResult : []).map((entry) => entry.found).filter(Boolean);
+  const byId = new Map(documents.map((document) => [document.name.split("/").pop(), document]));
+  const writes = [];
+  const reservedItems = [];
+
+  for (const [id, quantity] of quantities) {
+    const document = byId.get(id);
+    const stock = Number(document?.fields?.stock?.integerValue ?? document?.fields?.stock?.doubleValue);
+    if (!document || !Number.isInteger(stock) || stock < quantity) {
+      throw new Error(`${document?.fields?.name?.stringValue || "A product"} does not have enough stock.`);
+    }
+    writes.push({
+      update: {
+        name: document.name,
+        fields: {
+          stock: firestoreInteger(stock - quantity),
+          updatedAt: { timestampValue: new Date().toISOString() }
+        }
+      },
+      updateMask: { fieldPaths: ["stock", "updatedAt"] },
+      currentDocument: { updateTime: document.updateTime }
+    });
+    reservedItems.push({ id, quantity });
+  }
+
+  writes.push({
+    update: {
+      name: reservationName,
+      fields: {
+        reference: firestoreString(reference),
+        items: { arrayValue: { values: reservedItems.map((item) => ({ mapValue: { fields: { id: firestoreString(item.id), quantity: firestoreInteger(item.quantity) } } })) } },
+        createdAt: { timestampValue: new Date().toISOString() }
+      }
+    },
+    currentDocument: { exists: false }
+  });
+  await firestoreCommit(env, writes);
+}
+
 function corsHeaders(origin) {
   const headers = {
     "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -226,6 +362,15 @@ export default {
             400,
             origin
           );
+        }
+
+        if (result.data?.status === "success") {
+          try {
+            await reserveStock(env, reference, Array.isArray(result.data?.metadata?.items) ? result.data.metadata.items : []);
+          } catch (stockError) {
+            console.error("Stock reservation failed:", stockError);
+            return json({ error: stockError.message || "Stock could not be updated." }, 409, origin);
+          }
         }
 
         return json(

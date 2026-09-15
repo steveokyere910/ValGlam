@@ -2,4 +2,5 @@
 .firebase/hosting..cache
 .wrangler/
 worker/.wrangler/
+**/node_modules/
 tmp/

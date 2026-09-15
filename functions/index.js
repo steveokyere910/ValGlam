@@ -151,10 +151,60 @@ exports.verifyPaystackPayment = onCall({ secrets: [paystackSecret] }, async (req
       currency: cart.currency,
       status: "paid",
       paymentReference: reference,
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      stockAdjustedAt: admin.firestore.FieldValue.serverTimestamp()
     });
   });
   return { orderId: reference, status: "paid" };
+});
+
+exports.decrementStockForPaidOrder = onDocumentCreated("orders/{orderId}", async (event) => {
+  const orderSnapshot = event.data;
+  if (!orderSnapshot) return;
+
+  const orderRef = orderSnapshot.ref;
+  await db.runTransaction(async (transaction) => {
+    const currentOrderSnapshot = await transaction.get(orderRef);
+    const order = currentOrderSnapshot.data();
+    if (!currentOrderSnapshot.exists || order?.status !== "paid" || order.stockAdjustedAt) return;
+    const reservationSnapshot = order.paymentReference
+      ? await transaction.get(db.collection("paymentReservations").doc(String(order.paymentReference)))
+      : null;
+    if (reservationSnapshot?.exists) return;
+
+    const quantities = new Map();
+    for (const item of Array.isArray(order.items) ? order.items : []) {
+      const productId = String(item.id);
+      const quantity = Number.isInteger(Number(item.quantity)) && Number(item.quantity) > 0 ? Number(item.quantity) : 1;
+      quantities.set(productId, (quantities.get(productId) || 0) + quantity);
+    }
+    if (!quantities.size) return;
+
+    const productSnapshots = [];
+    for (const productId of quantities.keys()) {
+      productSnapshots.push({ id: productId, snapshot: await transaction.get(db.collection("products").doc(productId)) });
+    }
+
+    const unavailableProduct = productSnapshots.find(({ snapshot, id }) => {
+      const stock = Number(snapshot.data()?.stock);
+      return !snapshot.exists || !Number.isInteger(stock) || stock < quantities.get(id);
+    });
+    if (unavailableProduct) {
+      transaction.update(orderRef, {
+        status: "stock_issue",
+        stockIssue: `${unavailableProduct.snapshot.data()?.name || "A product"} does not have enough stock.`
+      });
+      return;
+    }
+
+    productSnapshots.forEach(({ snapshot, id }) => {
+      transaction.update(snapshot.ref, {
+        stock: Number(snapshot.data().stock) - quantities.get(id),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+    });
+    transaction.update(orderRef, { stockAdjustedAt: admin.firestore.FieldValue.serverTimestamp() });
+  });
 });
 
 exports.sendNotificationPush = onDocumentCreated("notifications/{notificationId}", async (event) => {
