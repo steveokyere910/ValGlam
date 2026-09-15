@@ -92,7 +92,7 @@ function App() {
   const [cart, setCart] = useState(0);
   const [cartItems, setCartItems] = useState([]);
   const [siteReady, setSiteReady] = useState(false);
-  const [showWelcomeAnimation, setShowWelcomeAnimation] = useState(false);
+  const [showWelcomeAnimation, setShowWelcomeAnimation] = useState(() => window.localStorage.getItem("valcare-welcome-seen") !== "true");
   const [welcomeStep, setWelcomeStep] = useState(0);
   const cartOwnerUid = useRef(null);
   const cartHydrated = useRef(false);
@@ -145,6 +145,11 @@ function App() {
   const [account, setAccount] = useState({ name: "", email: "", password: "", confirm: "" });
   const [userName, setUserName] = useState("");
   const [authMode, setAuthMode] = useState("login");
+
+  const closeWelcomeGuide = () => {
+    window.localStorage.setItem("valcare-welcome-seen", "true");
+    setShowWelcomeAnimation(false);
+  };
 
   useEffect(() => {
     if (!activePanel) return undefined;
@@ -619,7 +624,9 @@ function App() {
       const defaultIds = new Set(defaultProducts.map((product) => String(product.id)));
       const newProducts = remoteProducts.filter((product) => !defaultIds.has(String(product.id)));
       setProducts([...mergedProducts, ...newProducts]);
-    }, () => setProducts(defaultProducts));
+    }, (error) => {
+      console.warn("Live product catalog temporarily unavailable.", error);
+    });
   }, []);
 
   useEffect(() => {
@@ -807,7 +814,7 @@ function App() {
   const copyOrderId = async (orderId) => {
     try {
       await navigator.clipboard.writeText(String(orderId));
-      setProductMessage("Order ID copied.");
+      setProductMessage("Copied.");
     } catch {
       setProductMessage("Select and copy the order ID manually.");
     }
@@ -820,7 +827,7 @@ function App() {
     }
     try {
       await navigator.clipboard.writeText(String(value));
-      setProductMessage(`${label} copied.`);
+      setProductMessage("Copied.");
     } catch {
       setProductMessage(`Select and copy the ${label.toLowerCase()} manually.`);
     }
@@ -912,10 +919,13 @@ function App() {
           notificationSent = false;
         }
       }
+      const emailNotification = order?.customerEmail
+        ? await sendAdminEmailNotification("notify-delivery", { email: order.customerEmail, orderId: String(orderId) })
+        : { ok: false };
       setAdminOrders((current) => current.map((order) => String(order.id) === String(orderId)
         ? { ...order, status: "delivered" }
         : order));
-      setProductMessage(notificationSent ? "Delivery recorded successfully and the customer was notified." : "Delivery recorded, but the customer notification could not be sent.");
+      setProductMessage(notificationSent && emailNotification.ok ? "Delivery recorded and the customer was notified by app and email." : "Delivery recorded, but one or more notifications could not be sent.");
     } catch (error) {
       console.error("Order delivery update failed", error);
       setProductMessage("Could not mark this order as delivered. Please try again.");
@@ -1056,6 +1066,24 @@ function App() {
     setProductMessage("");
   };
 
+  const sendAdminEmailNotification = async (path, payload) => {
+    const user = window.valCareAuth?.currentUser;
+    if (!user || !window.valCarePaymentApiUrl) return false;
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(`${window.valCarePaymentApiUrl}/${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload)
+      });
+      const result = await response.json().catch(() => ({}));
+      return { ok: response.ok, ...result };
+    } catch (error) {
+      console.error("Email notification request failed", error);
+      return { ok: false, error: error.message || "Email notification request failed." };
+    }
+  };
+
   const saveProduct = async (event) => {
     event.preventDefault();
     const price = Number(productForm.price);
@@ -1075,19 +1103,32 @@ function App() {
       const isRestock = previousProduct && stock > Number(previousProduct.stock || 0);
       const reachedLowStock = stock === 1 && (!previousProduct || Number(previousProduct.stock || 0) !== 1);
       if (reachedLowStock || !previousProduct || isRestock) {
-        await window.valCareDb.collection("notifications").add({
-          title: reachedLowStock ? "Low stock alert" : previousProduct ? "Back in stock" : "New product",
-          message: reachedLowStock ? `Only 1 ${product.name} is left in stock.` : previousProduct ? `${product.name} has been restocked.` : `${product.name} is now available in the shop.`,
-          audience: "all",
-          recipientId: "",
-          createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
+        try {
+          await window.valCareDb.collection("notifications").add({
+            title: reachedLowStock ? "Low stock alert" : previousProduct ? "Back in stock" : "New product",
+            message: reachedLowStock ? `Only 1 ${product.name} is left in stock.` : previousProduct ? `${product.name} has been restocked.` : `${product.name} is now available in the shop.`,
+            audience: "all",
+            recipientId: "",
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+        } catch (notificationError) {
+          console.error("Product notification could not be created", notificationError);
+        }
       }
+      const emailNotification = await sendAdminEmailNotification("notify-catalog", {
+        productName: product.name,
+        price: formatPrice(product.price),
+        previousPrice: previousProduct ? formatPrice(previousProduct.price) : "",
+        isNewProduct: !previousProduct
+      });
       setProducts((current) => productForm.id
         ? current.map((item) => String(item.id) === String(productId) ? { ...item, ...product } : item)
         : [...current, product]);
-      setProductMessage(productForm.id ? "Product updated." : "Product added to the shop.");
+      const productMessage = emailNotification.ok
+        ? `${productForm.id ? "Product updated" : "Product added"}. Email sent to ${emailNotification.sent || 0} subscriber${emailNotification.sent === 1 ? "" : "s"}.`
+        : `${productForm.id ? "Product updated" : "Product added"}. Email notification failed: ${emailNotification.error || "check the Worker logs"}`;
       resetProductForm();
+      setProductMessage(productMessage);
     } catch (error) {
       console.error("Product save failed", error);
       const code = String(error.code || "").replace("firestore/", "");
@@ -1632,11 +1673,19 @@ function App() {
     setIsSubscribing(true);
     setSubscribeMessage("");
     try {
-      await window.valCareDb.collection("subscribers").doc(email.trim().toLowerCase()).set({
-        email: email.trim().toLowerCase(),
+      const normalizedEmail = email.trim().toLowerCase();
+      await window.valCareDb.collection("subscribers").doc(normalizedEmail).set({
+        email: normalizedEmail,
         subscribedAt: firebase.firestore.FieldValue.serverTimestamp(),
         source: "website"
       }, { merge: true });
+      const response = await fetch(`${window.valCarePaymentApiUrl}/subscribe`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: normalizedEmail })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Newsletter signup failed.");
       setSubscribed(true);
       setEmail("");
       window.trackValCareEvent?.("newsletter_signup");
@@ -1650,7 +1699,7 @@ function App() {
   return (
     <div className={`site-shell theme-${theme} ${siteReady ? "is-visible" : ""}`}>
       {isLanguageLoading && <div className="language-loading" role="status" aria-live="polite"><LoadingSpinner label="Loading language" /></div>}
-      {showWelcomeAnimation && <div className="welcome-animation" role="dialog" aria-modal="true" aria-labelledby="welcome-guide-title"><div className="welcome-animation-card welcome-guide-card"><button className="welcome-skip" type="button" onClick={() => setShowWelcomeAnimation(false)}>Skip</button><div className="welcome-sparkles" aria-hidden="true"><span>✦</span><span>✧</span><span>✦</span></div><p className="eyebrow">Your Val's Glam guide</p><h2 id="welcome-guide-title">Everything you need to know</h2><p className="welcome-step-text">Scroll through the guide to see every header button and setting.</p><div className="welcome-guide-list">{welcomeSteps.map((step, index) => <article className="welcome-guide-item" key={step.title}><FeaturePreview feature={step.feature} /><div><p className="eyebrow">{index + 1}. {step.eyebrow}</p><h3>{step.title}</h3><p className="welcome-step-text">{step.text}</p></div></article>)}</div><button className="settings-save welcome-guide-finish" type="button" onClick={() => setShowWelcomeAnimation(false)}>Start exploring</button></div></div>}
+      {showWelcomeAnimation && <div className="welcome-animation" role="dialog" aria-modal="true" aria-labelledby="welcome-guide-title"><div className="welcome-animation-card welcome-guide-card"><button className="welcome-skip" type="button" onClick={closeWelcomeGuide}>Skip</button><div className="welcome-sparkles" aria-hidden="true"><span>✦</span><span>✧</span><span>✦</span></div><p className="eyebrow">Your Val's Glam guide</p><h2 id="welcome-guide-title">Everything you need to know</h2><p className="welcome-step-text">A quick tour of shopping, accounts, notifications, favorites, settings, and checkout.</p><div className="welcome-guide-list">{welcomeSteps.map((step, index) => <article className="welcome-guide-item" key={step.title}><FeaturePreview feature={step.feature} /><div><p className="eyebrow">{index + 1}. {step.eyebrow}</p><h3>{step.title}</h3><p className="welcome-step-text">{step.text}</p></div></article>)}</div><button className="settings-save welcome-guide-finish" type="button" onClick={closeWelcomeGuide}>Start exploring</button></div></div>}
       <div className="announcement">{text.announcement}</div>
       {cartMessage && ReactDOM.createPortal(<div className="cart-toast" role="status" aria-live="polite">{cartMessage}</div>, document.body)}
       <header className="navbar">

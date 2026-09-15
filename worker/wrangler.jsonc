@@ -3,6 +3,7 @@
   "main": "index.js",
   "compatibility_date": "2026-09-08",
   "vars": {
-    "FIREBASE_PROJECT_ID": "valsglam"
+    "FIREBASE_PROJECT_ID": "valsglam",
+    "FIREBASE_WEB_API_KEY": "AIzaSyDZbU0dmAgim2APAZaLGTlCOVM4FJAcRY0"
   }
 }

@@ -147,7 +147,7 @@ async function reserveStock(env, reference, itemIds) {
 function corsHeaders(origin) {
   const headers = {
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Content-Type": "application/json",
     "Vary": "Origin"
   };
@@ -164,6 +164,76 @@ function json(data, status, origin) {
     status,
     headers: corsHeaders(origin)
   });
+}
+
+async function authorizeAdmin(request, env) {
+  const authorization = request.headers.get("Authorization") || "";
+  const idToken = authorization.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
+  if (!idToken || !env.FIREBASE_WEB_API_KEY) return false;
+  const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(env.FIREBASE_WEB_API_KEY)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ idToken })
+  });
+  const result = await response.json();
+  const user = result.users?.[0];
+  if (!user) return false;
+  if (["steveokyere910@gmail.com", "okyeresolomon910@gmail.com"].includes(String(user.email || "").toLowerCase())) return true;
+  if (!env.FIREBASE_SERVICE_ACCOUNT_JSON || !env.FIREBASE_PROJECT_ID) return false;
+  const serviceToken = await getFirestoreAccessToken(env.FIREBASE_SERVICE_ACCOUNT_JSON);
+  const configResponse = await fetch(`https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/adminStatus/config`, {
+    headers: { Authorization: `Bearer ${serviceToken}` }
+  });
+  if (!configResponse.ok) return false;
+  const config = await configResponse.json();
+  return config.fields?.createdBy?.stringValue === user.localId;
+}
+
+async function brevoRequest(env, path, options = {}) {
+  if (!env.BREVO_API_KEY || !env.BREVO_SENDER_EMAIL) throw new Error("Brevo email configuration is missing.");
+  const response = await fetch(`https://api.brevo.com/v3${path}`, {
+    ...options,
+    headers: { "api-key": env.BREVO_API_KEY, "Content-Type": "application/json", ...(options.headers || {}) }
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.message || "Brevo request failed.");
+  return result;
+}
+
+async function sendBrevoEmail(env, recipient, subject, htmlContent) {
+  return brevoRequest(env, "/smtp/email", {
+    method: "POST",
+    body: JSON.stringify({
+      sender: { email: env.BREVO_SENDER_EMAIL, name: env.BREVO_SENDER_NAME || "Val's Glam" },
+      to: [{ email: recipient }],
+      subject,
+      htmlContent
+    })
+  });
+}
+
+const emailBrand = '<div style="border-bottom:1px solid #eadcf2;margin-bottom:24px;padding-bottom:18px;text-align:center"><img src="https://valsglam.web.app/vals.jpg" alt="Val\'s Glam" style="border-radius:50%;display:inline-block;height:64px;width:64px"><div style="color:#7337a1;font-family:Georgia,serif;font-size:16px;margin-top:8px">Val\'s Glam</div></div>';
+const shopButton = '<p style="margin:28px 0"><a href="https://valsglam.web.app" style="background:#24152c;color:#ffffff;display:inline-block;font-family:Arial,sans-serif;font-size:14px;font-weight:700;padding:13px 22px;text-decoration:none">Shop Val\'s Glam</a></p>';
+
+async function getBrevoListEmails(env) {
+  const emails = [];
+  for (let offset = 0; offset < 1000; offset += 50) {
+    const result = await brevoRequest(env, `/contacts?limit=50&offset=${offset}&listIds[]=${encodeURIComponent(env.BREVO_LIST_ID)}`);
+    const contacts = result.contacts || [];
+    emails.push(...contacts.map((contact) => contact.email).filter(Boolean));
+    if (contacts.length < 50) break;
+  }
+  return [...new Set(emails)];
+}
+
+async function getFirebaseSubscriberEmails(env) {
+  const token = await getFirestoreAccessToken(env.FIREBASE_SERVICE_ACCOUNT_JSON);
+  const response = await fetch(`https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/subscribers?pageSize=1000`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error?.message || "Could not load newsletter subscribers.");
+  return (result.documents || []).map((document) => document.fields?.email?.stringValue).filter(Boolean);
 }
 
 async function parseRequestJson(request) {
@@ -389,6 +459,73 @@ export default {
           502,
           origin
         );
+      }
+    }
+
+    if (path === "/subscribe") {
+      const email = String(data.email || "").trim().toLowerCase();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+        return json({ error: "Please enter a valid email address." }, 400, origin);
+      }
+      if (!env.BREVO_API_KEY || !env.BREVO_LIST_ID) {
+        return json({ error: "Newsletter service is not configured." }, 503, origin);
+      }
+      try {
+        const response = await fetch("https://api.brevo.com/v3/contacts", {
+          method: "POST",
+          headers: { "api-key": env.BREVO_API_KEY, "Content-Type": "application/json" },
+          body: JSON.stringify({ email, listIds: [Number(env.BREVO_LIST_ID)], updateEnabled: true })
+        });
+        if (!response.ok && response.status !== 201) {
+          const result = await response.json().catch(() => ({}));
+          console.error("Brevo subscription error:", result);
+          return json({ error: "Could not join the newsletter right now." }, 502, origin);
+        }
+        return json({ subscribed: true }, 200, origin);
+      } catch (error) {
+        console.error("Brevo subscription request failed:", error);
+        return json({ error: "Newsletter service is unavailable." }, 502, origin);
+      }
+    }
+
+    if (path === "/notify-catalog" || path === "/notify-delivery") {
+      let isAdmin = false;
+      try {
+        isAdmin = await authorizeAdmin(request, env);
+      } catch (error) {
+        console.error("Admin notification authorization failed:", error);
+      }
+      if (!isAdmin) return json({ error: "Admin authorization required." }, 403, origin);
+
+      try {
+        if (path === "/notify-delivery") {
+          const email = String(data.email || "").trim().toLowerCase();
+          const orderId = String(data.orderId || "").trim();
+          if (!email || !orderId) return json({ error: "Delivery notification details are incomplete." }, 400, origin);
+          await sendBrevoEmail(env, email, "Your Val's Glam order has been delivered", `${emailBrand}<p>Hello,</p><p>Your Val's Glam order <strong>${orderId}</strong> has been marked as delivered.</p><p>Thank you for shopping with us.</p>${shopButton}`);
+          return json({ sent: true }, 200, origin);
+        }
+
+        const productName = String(data.productName || "Val's Glam product").trim();
+        const price = String(data.price || "").trim();
+        const previousPrice = String(data.previousPrice || "").trim();
+        const isNewProduct = data.isNewProduct === true;
+        const subject = isNewProduct ? `New at Val's Glam: ${productName}` : `Price update: ${productName}`;
+        const message = isNewProduct
+          ? `${emailBrand}<p>Meet our newest Val's Glam find: <strong>${productName}</strong>.</p><p>It is now available in the shop for <strong>${price}</strong>.</p>${shopButton}`
+          : `${emailBrand}<p>The price of <strong>${productName}</strong> has changed from <strong>${previousPrice}</strong> to <strong>${price}</strong>.</p><p>Visit Val's Glam to see the latest details.</p>${shopButton}`;
+        const [brevoRecipients, firebaseRecipients] = await Promise.all([
+          getBrevoListEmails(env).catch((error) => { console.error("Brevo list lookup failed:", error); return []; }),
+          getFirebaseSubscriberEmails(env)
+        ]);
+        const recipients = [...new Set([...brevoRecipients, ...firebaseRecipients])];
+        const results = await Promise.allSettled(recipients.map((email) => sendBrevoEmail(env, email, subject, message)));
+        const failed = results.filter((result) => result.status === "rejected");
+        if (failed.length) console.error("Some catalog emails failed:", failed.map((result) => result.reason?.message));
+        return json({ sent: results.length - failed.length, failed: failed.length }, 200, origin);
+      } catch (error) {
+        console.error("Brevo notification failed:", error);
+        return json({ error: error.message || "Email notification failed." }, 502, origin);
       }
     }
 
